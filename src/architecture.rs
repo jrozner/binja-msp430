@@ -234,7 +234,7 @@ impl Architecture for Msp430 {
     }
 
     fn flags(&self) -> Vec<Self::Flag> {
-        Vec::new()
+        (0..=8).map(|i| Flag::new(i)).collect()
     }
 
     fn flag_write_types(&self) -> Vec<Self::FlagWrite> {
@@ -265,7 +265,7 @@ impl Architecture for Msp430 {
     }
 
     fn flag_from_id(&self, id: u32) -> Option<Self::Flag> {
-        None
+        Some(Flag::new(id))
     }
 
     fn flag_write_from_id(&self, id: u32) -> Option<Self::FlagWrite> {
@@ -346,21 +346,46 @@ impl architecture::RegisterInfo for Register {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Flag {}
+pub struct Flag {
+    id: u32
+}
+
+impl Flag {
+    pub fn new(id: u32) -> Self {
+        Flag{ id }
+    }
+}
 
 impl architecture::Flag for Flag {
     type FlagClass = Flag;
 
     fn name(&self) -> Cow<str> {
-        unimplemented!()
+        match self.id {
+            0 => "C".into(),
+            1 => "Z".into(),
+            2 => "N".into(),
+            3 => "GIE".into(),
+            4 => "CPUOFF".into(),
+            5 => "OSCOFF".into(),
+            6 => "SCG0".into(),
+            7 => "SCG1".into(),
+            8 => "V".into(),
+            _ => unreachable!(),
+        }
     }
 
     fn role(&self, class: Option<Self::FlagClass>) -> architecture::FlagRole {
-        unimplemented!()
+        match class {
+            Some(Flag{id: 0}) => architecture::FlagRole::CarryFlagRole,
+            Some(Flag{id: 1}) => architecture::FlagRole::ZeroFlagRole,
+            Some(Flag{id: 2}) => architecture::FlagRole::NegativeSignFlagRole,
+            Some(Flag{id: 8}) => architecture::FlagRole::OverflowFlagRole,
+            _ => unreachable!()
+        }
     }
 
     fn id(&self) -> u32 {
-        unimplemented!()
+        self.id
     }
 }
 
