@@ -4,7 +4,9 @@ extern crate msp430_asm;
 
 use binaryninja::{
     architecture::ArchitectureExt,
-    callingconvention
+    callingconvention,
+    custombinaryview::{BinaryViewType, BinaryViewTypeExt},
+    Endianness,
 };
 
 mod architecture;
@@ -39,9 +41,10 @@ pub extern "C" fn CorePluginInit() -> bool {
         .return_hi_int_reg("r14")
         .register("stack");
 
-    match arch.standalone_platform() {
-        Some(platform) => platform.set_default_calling_convention(&default),
-        None => log::warn!("unable to set default calling convention"),
+    arch.set_default_calling_convention(&default);
+
+    if let Ok(bv) = BinaryViewType::by_name("ELF") {
+        bv.register_arch(105, Endianness::LittleEndian, arch);
     }
 
     true
