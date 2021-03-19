@@ -12,6 +12,7 @@ use binaryninja::{
 mod architecture;
 
 use architecture::Msp430;
+use binaryninja::callingconvention::CallingConvention;
 
 #[no_mangle]
 #[allow(non_snake_case)]

@@ -2,8 +2,9 @@ use binaryninja::{
     architecture,
     architecture::{
         Architecture, BranchInfo, CoreArchitecture, CustomArchitectureHandle,
-        InstructionInfo, InstructionTextToken, InstructionTextTokenContents, ImplicitRegisterExtend,
+        InstructionInfo, ImplicitRegisterExtend,
     },
+    disassembly::{InstructionTextToken, InstructionTextTokenType},
     llil::{LiftedExpr, Lifter},
     Endianness,
 };
@@ -425,8 +426,9 @@ fn generate_tokens(inst: &Instruction, addr: u64) -> Vec<InstructionTextToken> {
         Instruction::Push(inst) => generate_single_operand_tokens(inst, addr),
         Instruction::Call(inst) => generate_single_operand_tokens(inst, addr),
         Instruction::Reti(_) => vec![InstructionTextToken::new(
-            InstructionTextTokenContents::Instruction,
-            format!("{}", "reti"),
+            InstructionTextTokenType::InstructionToken,
+            &format!("{}", "reti"),
+            0
         )],
 
         // Jxx instructions
@@ -486,8 +488,9 @@ fn generate_single_operand_tokens(
     addr: u64,
 ) -> Vec<InstructionTextToken> {
     let mut res = vec![InstructionTextToken::new(
-        InstructionTextTokenContents::Instruction,
-        format!("{}", inst.mnemonic()),
+        InstructionTextTokenType::InstructionToken,
+        &format!("{}", inst.mnemonic()),
+        0,
     )];
 
     if inst.mnemonic().len() < MIN_MNEMONIC {
@@ -495,8 +498,9 @@ fn generate_single_operand_tokens(
             .take(MIN_MNEMONIC - inst.mnemonic().len())
             .collect::<String>();
         res.push(InstructionTextToken::new(
-            InstructionTextTokenContents::Text,
-            padding,
+            InstructionTextTokenType::TextToken,
+            &padding,
+            0,
         ))
     }
 
@@ -509,8 +513,9 @@ fn generate_jxx_tokens(inst: &impl Jxx, addr: u64) -> Vec<InstructionTextToken> 
     let fixed_addr = offset_to_absolute(addr, inst.offset());
 
     let mut res = vec![InstructionTextToken::new(
-        InstructionTextTokenContents::Instruction,
-        format!("{}", inst.mnemonic()),
+        InstructionTextTokenType::InstructionToken,
+        &format!("{}", inst.mnemonic()),
+        0,
     )];
 
     if inst.mnemonic().len() < MIN_MNEMONIC {
@@ -518,14 +523,16 @@ fn generate_jxx_tokens(inst: &impl Jxx, addr: u64) -> Vec<InstructionTextToken> 
             .take(MIN_MNEMONIC - inst.mnemonic().len())
             .collect::<String>();
         res.push(InstructionTextToken::new(
-            InstructionTextTokenContents::Text,
-            padding,
+            InstructionTextTokenType::TextToken,
+            &padding,
+            0,
         ))
     }
 
     res.push(InstructionTextToken::new(
-        InstructionTextTokenContents::PossibleAddress(fixed_addr),
-        format!("0x{:4x}", fixed_addr),
+        InstructionTextTokenType::PossibleAddressToken,
+        &format!("0x{:4x}", fixed_addr),
+        0,
     ));
 
     res
@@ -533,8 +540,9 @@ fn generate_jxx_tokens(inst: &impl Jxx, addr: u64) -> Vec<InstructionTextToken> 
 
 fn generate_two_operand_tokens(inst: &impl TwoOperand, addr: u64) -> Vec<InstructionTextToken> {
     let mut res = vec![InstructionTextToken::new(
-        InstructionTextTokenContents::Instruction,
-        format!("{}", inst.mnemonic()),
+        InstructionTextTokenType::InstructionToken,
+        &format!("{}", inst.mnemonic()),
+        0,
     )];
 
     if inst.mnemonic().len() < MIN_MNEMONIC {
@@ -542,15 +550,17 @@ fn generate_two_operand_tokens(inst: &impl TwoOperand, addr: u64) -> Vec<Instruc
             .take(MIN_MNEMONIC - inst.mnemonic().len())
             .collect::<String>();
         res.push(InstructionTextToken::new(
-            InstructionTextTokenContents::Text,
-            padding,
+            InstructionTextTokenType::TextToken,
+            &padding,
+            0,
         ))
     }
 
     res.extend_from_slice(&generate_operand_tokens(inst.source(), addr));
     res.push(InstructionTextToken::new(
-        InstructionTextTokenContents::OperandSeparator,
+        InstructionTextTokenType::OperandSeparatorToken,
         ", ",
+        0,
     ));
     res.extend_from_slice(&generate_operand_tokens(inst.destination(), addr));
 
@@ -559,8 +569,9 @@ fn generate_two_operand_tokens(inst: &impl TwoOperand, addr: u64) -> Vec<Instruc
 
 fn generate_emulated_tokens(inst: &impl Emulated, addr: u64) -> Vec<InstructionTextToken> {
     let mut res = vec![InstructionTextToken::new(
-        InstructionTextTokenContents::Instruction,
-        format!("{}", inst.mnemonic()),
+        InstructionTextTokenType::InstructionToken,
+        &format!("{}", inst.mnemonic()),
+        0,
     )];
 
     if inst.mnemonic().len() < MIN_MNEMONIC {
@@ -568,8 +579,9 @@ fn generate_emulated_tokens(inst: &impl Emulated, addr: u64) -> Vec<InstructionT
             .take(MIN_MNEMONIC - inst.mnemonic().len())
             .collect::<String>();
         res.push(InstructionTextToken::new(
-            InstructionTextTokenContents::Text,
-            padding,
+            InstructionTextTokenType::TextToken,
+            &padding,
+            0,
         ))
     }
 
@@ -584,24 +596,29 @@ fn generate_operand_tokens(source: &Operand, addr: u64) -> Vec<InstructionTextTo
     match source {
         Operand::RegisterDirect(r) => match r {
             0 => vec![InstructionTextToken::new(
-                InstructionTextTokenContents::Register,
+                InstructionTextTokenType::RegisterToken,
                 "pc",
+                0,
             )],
             1 => vec![InstructionTextToken::new(
-                InstructionTextTokenContents::Register,
+                InstructionTextTokenType::RegisterToken,
                 "sp",
+                0,
             )],
             2 => vec![InstructionTextToken::new(
-                InstructionTextTokenContents::Register,
+                InstructionTextTokenType::RegisterToken,
                 "sr",
+                0,
             )],
             3 => vec![InstructionTextToken::new(
-                InstructionTextTokenContents::Register,
+                InstructionTextTokenType::RegisterToken,
                 "cg",
+                0
             )],
             _ => vec![InstructionTextToken::new(
-                InstructionTextTokenContents::Register,
-                format!("r{}", r),
+                InstructionTextTokenType::RegisterToken,
+                &format!("r{}", r),
+                0,
             )],
         },
         Operand::Indexed((r, i)) => match r {
@@ -613,12 +630,13 @@ fn generate_operand_tokens(source: &Operand, addr: u64) -> Vec<InstructionTextTo
                 };
                 vec![
                     InstructionTextToken::new(
-                        InstructionTextTokenContents::Integer(*i as u64),
-                        num_text,
+                        InstructionTextTokenType::IntegerToken,
+                        &num_text,
+                        *i as u64,
                     ),
-                    InstructionTextToken::new(InstructionTextTokenContents::Text, "("),
-                    InstructionTextToken::new(InstructionTextTokenContents::Register, "pc"),
-                    InstructionTextToken::new(InstructionTextTokenContents::Text, ")"),
+                    InstructionTextToken::new(InstructionTextTokenType::TextToken, "(", 0),
+                    InstructionTextToken::new(InstructionTextTokenType::RegisterToken, "pc", 0),
+                    InstructionTextToken::new(InstructionTextTokenType::TextToken, ")", 0),
                 ]
             }
             1 => {
@@ -629,12 +647,13 @@ fn generate_operand_tokens(source: &Operand, addr: u64) -> Vec<InstructionTextTo
                 };
                 vec![
                     InstructionTextToken::new(
-                        InstructionTextTokenContents::Integer(*i as u64),
-                        num_text,
+                        InstructionTextTokenType::IntegerToken,
+                        &num_text,
+                        0,
                     ),
-                    InstructionTextToken::new(InstructionTextTokenContents::Text, "("),
-                    InstructionTextToken::new(InstructionTextTokenContents::Register, "sp"),
-                    InstructionTextToken::new(InstructionTextTokenContents::Text, ")"),
+                    InstructionTextToken::new(InstructionTextTokenType::TextToken, "(", 0),
+                    InstructionTextToken::new(InstructionTextTokenType::RegisterToken, "sp", 0),
+                    InstructionTextToken::new(InstructionTextTokenType::TextToken, ")", 0),
                 ]
             }
             2 => {
@@ -645,12 +664,13 @@ fn generate_operand_tokens(source: &Operand, addr: u64) -> Vec<InstructionTextTo
                 };
                 vec![
                     InstructionTextToken::new(
-                        InstructionTextTokenContents::Integer(*i as u64),
-                        num_text,
+                        InstructionTextTokenType::IntegerToken,
+                        &num_text,
+                        *i as u64
                     ),
-                    InstructionTextToken::new(InstructionTextTokenContents::Text, "("),
-                    InstructionTextToken::new(InstructionTextTokenContents::Register, "sr"),
-                    InstructionTextToken::new(InstructionTextTokenContents::Text, ")"),
+                    InstructionTextToken::new(InstructionTextTokenType::TextToken, "(", 0),
+                    InstructionTextToken::new(InstructionTextTokenType::RegisterToken, "sr", 0),
+                    InstructionTextToken::new(InstructionTextTokenType::TextToken, ")", 0),
                 ]
             }
             3 => {
@@ -661,12 +681,13 @@ fn generate_operand_tokens(source: &Operand, addr: u64) -> Vec<InstructionTextTo
                 };
                 vec![
                     InstructionTextToken::new(
-                        InstructionTextTokenContents::Integer(*i as u64),
-                        num_text,
+                        InstructionTextTokenType::IntegerToken,
+                        &num_text,
+                        *i as u64,
                     ),
-                    InstructionTextToken::new(InstructionTextTokenContents::Text, "("),
-                    InstructionTextToken::new(InstructionTextTokenContents::Register, "cg"),
-                    InstructionTextToken::new(InstructionTextTokenContents::Text, ")"),
+                    InstructionTextToken::new(InstructionTextTokenType::TextToken, "(", 0),
+                    InstructionTextToken::new(InstructionTextTokenType::RegisterToken, "cg", 0),
+                    InstructionTextToken::new(InstructionTextTokenType::TextToken, ")", 0),
                 ]
             }
             _ => {
@@ -677,15 +698,17 @@ fn generate_operand_tokens(source: &Operand, addr: u64) -> Vec<InstructionTextTo
                 };
                 vec![
                     InstructionTextToken::new(
-                        InstructionTextTokenContents::Integer(*i as u64),
-                        num_text,
+                        InstructionTextTokenType::IntegerToken,
+                        &num_text,
+                        *i as u64,
                     ),
-                    InstructionTextToken::new(InstructionTextTokenContents::Text, "("),
+                    InstructionTextToken::new(InstructionTextTokenType::TextToken, "(", 0),
                     InstructionTextToken::new(
-                        InstructionTextTokenContents::Register,
-                        format!("r{}", r),
+                        InstructionTextTokenType::RegisterToken,
+                        &format!("r{}", r),
+                        0,
                     ),
-                    InstructionTextToken::new(InstructionTextTokenContents::Text, ")"),
+                    InstructionTextToken::new(InstructionTextTokenType::TextToken, ")", 0),
                 ]
             }
         },
@@ -697,8 +720,8 @@ fn generate_operand_tokens(source: &Operand, addr: u64) -> Vec<InstructionTextTo
             };
 
             vec![
-                InstructionTextToken::new(InstructionTextTokenContents::Text, "@"),
-                InstructionTextToken::new(InstructionTextTokenContents::Register, r_text),
+                InstructionTextToken::new(InstructionTextTokenType::TextToken, "@", 0),
+                InstructionTextToken::new(InstructionTextTokenType::RegisterToken, &r_text, 0),
             ]
         }
         Operand::RegisterIndirectAutoIncrement(r) => {
@@ -709,30 +732,33 @@ fn generate_operand_tokens(source: &Operand, addr: u64) -> Vec<InstructionTextTo
             };
 
             vec![
-                InstructionTextToken::new(InstructionTextTokenContents::Text, "@"),
-                InstructionTextToken::new(InstructionTextTokenContents::Register, r_text),
-                InstructionTextToken::new(InstructionTextTokenContents::Text, "+"),
+                InstructionTextToken::new(InstructionTextTokenType::TextToken, "@", 0),
+                InstructionTextToken::new(InstructionTextTokenType::RegisterToken, &r_text, 0),
+                InstructionTextToken::new(InstructionTextTokenType::TextToken, "+", 0),
             ]
         }
         // TODO: is this correct? can you know what this is without knowing what PC is?
         Operand::Symbolic(i) => vec![InstructionTextToken::new(
-            InstructionTextTokenContents::PossibleAddress((addr as i16 + i) as u64),
-            format!("{:#x}", addr as i16 + i),
+            InstructionTextTokenType::PossibleAddressToken,
+            &format!("{:#x}", addr as i16 + i),
+            (addr as i16 + i) as u64,
         )],
         Operand::Immediate(i) => {
             vec![
-                InstructionTextToken::new(InstructionTextTokenContents::Text, "#"),
+                InstructionTextToken::new(InstructionTextTokenType::TextToken, "#", 0),
                 InstructionTextToken::new(
-                    InstructionTextTokenContents::PossibleAddress(*i as u64),
-                    format!("{:#x}", i),
+                    InstructionTextTokenType::PossibleAddressToken,
+                    &format!("{:#x}", i),
+                    *i as u64,
                 ),
             ]
         }
         Operand::Absolute(a) => vec![
-            InstructionTextToken::new(InstructionTextTokenContents::Text, "&"),
+            InstructionTextToken::new(InstructionTextTokenType::TextToken, "&", 0),
             InstructionTextToken::new(
-                InstructionTextTokenContents::PossibleAddress(*a as u64),
-                format!("{:#x}", a),
+                InstructionTextTokenType::PossibleAddressToken,
+                &format!("{:#x}", a),
+                *a as u64
             ),
         ],
         Operand::Constant(i) => {
@@ -743,10 +769,11 @@ fn generate_operand_tokens(source: &Operand, addr: u64) -> Vec<InstructionTextTo
             };
 
             vec![
-                InstructionTextToken::new(InstructionTextTokenContents::Text, "#"),
+                InstructionTextToken::new(InstructionTextTokenType::TextToken, "#", 0),
                 InstructionTextToken::new(
-                    InstructionTextTokenContents::Integer(*i as u64),
-                    num_text,
+                    InstructionTextTokenType::IntegerToken,
+                    &num_text,
+                    *i as u64,
                 ),
             ]
         }
