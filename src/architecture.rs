@@ -186,7 +186,11 @@ impl Architecture for Msp430 {
         match msp430_asm::decode(data) {
             Ok(inst) => {
                 let tokens = generate_tokens(&inst, addr);
-                Some((inst.size(), tokens))
+                if tokens.len() < 1 {
+                    None
+                } else {
+                    Some((inst.size(), tokens))
+                }
             }
             Err(_) => None,
         }
@@ -198,7 +202,13 @@ impl Architecture for Msp430 {
         addr: u64,
         il: &mut Lifter<Self>,
     ) -> Option<(usize, bool)> {
-        None
+        match msp430_asm::decode(data) {
+            Ok(inst) => {
+                let lifted = lift_instruction(&inst, addr, il);
+                Some((inst.size(), lifted))
+            },
+            Err(_) => None,
+        }
     }
 
     fn flags_required_for_flag_condition(
@@ -751,6 +761,86 @@ fn generate_operand_tokens(source: &Operand, addr: u64) -> Vec<InstructionTextTo
             ]
         }
     }
+}
+
+fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) -> bool {
+    match inst {
+        Instruction::Rrc(inst) => lift_single_operand(inst, addr, il),
+        Instruction::Swpb(inst) => lift_single_operand(inst, addr, il),
+        Instruction::Rra(inst) => lift_single_operand(inst, addr, il),
+        Instruction::Sxt(inst) => lift_single_operand(inst, addr, il),
+        Instruction::Push(inst) => lift_single_operand(inst, addr, il),
+        Instruction::Call(inst) => lift_single_operand(inst, addr, il),
+        Instruction::Reti(_) => {
+            false
+        },
+
+        // Jxx instructions
+        Instruction::Jnz(inst) => lift_jxx(inst, addr, il),
+        Instruction::Jz(inst) => lift_jxx(inst, addr, il),
+        Instruction::Jlo(inst) => lift_jxx(inst, addr, il),
+        Instruction::Jc(inst) => lift_jxx(inst, addr, il),
+        Instruction::Jn(inst) => lift_jxx(inst, addr, il ),
+        Instruction::Jge(inst) => lift_jxx(inst, addr, il),
+        Instruction::Jl(inst) => lift_jxx(inst, addr, il),
+        Instruction::Jmp(inst) => lift_jxx(inst, addr, il),
+
+        // two operand instructions
+        Instruction::Mov(inst) => lift_two_operand(inst, addr, il),
+        Instruction::Add(inst) => lift_two_operand(inst, addr, il),
+        Instruction::Addc(inst) => lift_two_operand(inst, addr, il),
+        Instruction::Subc(inst) => lift_two_operand(inst, addr, il),
+        Instruction::Sub(inst) => lift_two_operand(inst, addr, il),
+        Instruction::Cmp(inst) => lift_two_operand(inst, addr, il),
+        Instruction::Dadd(inst) => lift_two_operand(inst, addr, il),
+        Instruction::Bit(inst) => lift_two_operand(inst, addr, il),
+        Instruction::Bic(inst) => lift_two_operand(inst, addr, il),
+        Instruction::Bis(inst) => lift_two_operand(inst, addr, il),
+        Instruction::Xor(inst) => lift_two_operand(inst, addr, il),
+        Instruction::And(inst) => lift_two_operand(inst, addr, il),
+
+        // emulated
+        Instruction::Adc(inst) => lift_emulated(inst, addr, il),
+        Instruction::Br(inst) => lift_emulated(inst, addr, il),
+        Instruction::Clr(inst) => lift_emulated(inst, addr, il),
+        Instruction::Clrc(inst) => lift_emulated(inst, addr, il),
+        Instruction::Clrn(inst) => lift_emulated(inst, addr, il),
+        Instruction::Clrz(inst) => lift_emulated(inst, addr, il),
+        Instruction::Dadc(inst) => lift_emulated(inst, addr, il),
+        Instruction::Dec(inst) => lift_emulated(inst, addr, il),
+        Instruction::Decd(inst) => lift_emulated(inst, addr, il),
+        Instruction::Dint(inst) => lift_emulated(inst, addr, il),
+        Instruction::Eint(inst) => lift_emulated(inst, addr, il),
+        Instruction::Inc(inst) => lift_emulated(inst, addr, il),
+        Instruction::Incd(inst) => lift_emulated(inst, addr, il),
+        Instruction::Inv(inst) => lift_emulated(inst, addr, il),
+        Instruction::Nop(inst) => lift_emulated(inst, addr, il),
+        Instruction::Pop(inst) => lift_emulated(inst, addr, il),
+        Instruction::Ret(inst) => lift_emulated(inst, addr, il),
+        Instruction::Rla(inst) => lift_emulated(inst, addr, il),
+        Instruction::Rlc(inst) => lift_emulated(inst, addr, il),
+        Instruction::Sbc(inst) => lift_emulated(inst, addr, il),
+        Instruction::Setc(inst) => lift_emulated(inst, addr, il),
+        Instruction::Setn(inst) => lift_emulated(inst, addr, il),
+        Instruction::Setz(inst) => lift_emulated(inst, addr, il),
+        Instruction::Tst(inst) => lift_emulated(inst, addr, il),
+    }
+}
+
+fn lift_single_operand(inst: &impl SingleOperand, addr: u64, il: &Lifter<Msp430>) -> bool {
+    return false
+}
+
+fn lift_jxx(inst: &impl Jxx, addr: u64, il: &Lifter<Msp430>) -> bool {
+    return false
+}
+
+fn lift_two_operand(inst: &impl TwoOperand, addr: u64, il: &Lifter<Msp430>) -> bool {
+    return false
+}
+
+fn lift_emulated(inst: &impl Emulated, addr: u64, il: &Lifter<Msp430>) -> bool {
+    return false
 }
 
 fn offset_to_absolute(addr: u64, offset: i16) -> u64 {
