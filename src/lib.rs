@@ -17,9 +17,10 @@ use architecture::Msp430;
 #[allow(non_snake_case)]
 pub extern "C" fn CorePluginInit() -> bool {
     binaryninja::logger::init(log::LevelFilter::Info).unwrap();
-    let arch = binaryninja::architecture::register_architecture("msp430-native", |custom_handle, handle| {
-        Msp430::new(handle, custom_handle)
-    });
+    let arch = binaryninja::architecture::register_architecture(
+        "msp430-native",
+        |custom_handle, handle| Msp430::new(handle, custom_handle),
+    );
 
     // we may need to introduce additional calling conventions here to
     // support additional ABIs. MSPGCC's calling convention (what

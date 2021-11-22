@@ -2,17 +2,20 @@ use binaryninja::{
     architecture,
     architecture::{
         Architecture, BranchInfo, CoreArchitecture, CustomArchitectureHandle,
-        InstructionInfo, InstructionTextToken, InstructionTextTokenContents, ImplicitRegisterExtend,
+        ImplicitRegisterExtend, InstructionInfo, InstructionTextToken,
+        InstructionTextTokenContents,
     },
     llil::{LiftedExpr, Lifter},
     Endianness,
 };
 
 use msp430_asm::{
-    emulate::Emulated, instruction::Instruction, jxx::Jxx, operand::Operand,
+    emulate::Emulated, instruction::Instruction, jxx::Jxx, operand::Operand, operand::OperandWidth,
     single_operand::SingleOperand, two_operand::TwoOperand,
 };
 
+use binaryninja::llil::{LiftedNonSSA, Mutable, NonSSA};
+use log::info;
 use std::borrow::Cow;
 use std::collections::HashMap;
 
@@ -206,7 +209,7 @@ impl Architecture for Msp430 {
             Ok(inst) => {
                 let lifted = lift_instruction(&inst, addr, il);
                 Some((inst.size(), lifted))
-            },
+            }
             Err(_) => None,
         }
     }
@@ -304,6 +307,12 @@ impl AsRef<CoreArchitecture> for Msp430 {
 #[derive(Debug, Clone, Copy)]
 pub struct Register {
     id: u32,
+}
+
+impl From<u32> for Register {
+    fn from(id: u32) -> Self {
+        Register::new(id)
+    }
 }
 
 impl Register {
@@ -730,6 +739,7 @@ fn generate_operand_tokens(source: &Operand, addr: u64) -> Vec<InstructionTextTo
             format!("{:#x}", addr as i16 + i),
         )],
         Operand::Immediate(i) => {
+            // TODO: is this right? Do we need to sign extend the i16 to u64?
             vec![
                 InstructionTextToken::new(InstructionTextTokenContents::Text, "#"),
                 InstructionTextToken::new(
@@ -763,84 +773,214 @@ fn generate_operand_tokens(source: &Operand, addr: u64) -> Vec<InstructionTextTo
     }
 }
 
+macro_rules! auto_increment {
+    ($src:expr, $il:ident) => {
+        if let Operand::RegisterIndirectAutoIncrement(r) = $src {
+            $il.set_reg(
+                2,
+                Register::from(*r as u32),
+                $il.add(
+                    2,
+                    $il.reg(2, Register::from(*r as u32)),
+                    $il.const_int(2, 2),
+                ),
+            )
+            .append();
+        }
+    };
+}
+
+macro_rules! two_operand {
+    ($inst:ident, $il:ident, $op:ident) => {
+        match $inst.destination() {
+            Operand::RegisterDirect(r) => $il.set_reg(2, Register::from(*r as u32), $op).append(),
+            Operand::Indexed((r, offset)) => $il
+                .store(
+                    2,
+                    $il.add(
+                        2,
+                        $il.reg(2, Register::from(*r as u32)),
+                        $il.const_int(2, *offset as u64),
+                    ),
+                    $op,
+                )
+                .append(),
+            Operand::Symbolic(offset) => $il
+                .store(
+                    2,
+                    $il.add(2, $il.reg(2, Register::from(0)), *offset as u64),
+                    $op,
+                )
+                .append(),
+            Operand::Absolute(val) => $il.store(2, $il.const_ptr(*val as u64), $op).append(),
+            _ => {
+                unreachable!()
+            }
+        };
+    };
+}
+
 fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) -> bool {
     match inst {
-        Instruction::Rrc(inst) => lift_single_operand(inst, addr, il),
-        Instruction::Swpb(inst) => lift_single_operand(inst, addr, il),
-        Instruction::Rra(inst) => lift_single_operand(inst, addr, il),
-        Instruction::Sxt(inst) => lift_single_operand(inst, addr, il),
-        Instruction::Push(inst) => lift_single_operand(inst, addr, il),
-        Instruction::Call(inst) => lift_single_operand(inst, addr, il),
-        Instruction::Reti(_) => {
-            false
-        },
+        Instruction::Rrc(_) => lift_single_operand(inst, addr, il),
+        Instruction::Swpb(_) => lift_single_operand(inst, addr, il),
+        Instruction::Rra(_) => lift_single_operand(inst, addr, il),
+        Instruction::Sxt(_) => lift_single_operand(inst, addr, il),
+        Instruction::Push(inst) => {
+            let src = lift_source_operand(inst.source(), addr, il);
+            il.push(2, src).append();
+            auto_increment!(inst.source(), il);
+            true
+        }
+        Instruction::Call(_) => lift_single_operand(inst, addr, il),
+        Instruction::Reti(_) => false,
 
         // Jxx instructions
-        Instruction::Jnz(inst) => lift_jxx(inst, addr, il),
-        Instruction::Jz(inst) => lift_jxx(inst, addr, il),
-        Instruction::Jlo(inst) => lift_jxx(inst, addr, il),
-        Instruction::Jc(inst) => lift_jxx(inst, addr, il),
-        Instruction::Jn(inst) => lift_jxx(inst, addr, il ),
-        Instruction::Jge(inst) => lift_jxx(inst, addr, il),
-        Instruction::Jl(inst) => lift_jxx(inst, addr, il),
-        Instruction::Jmp(inst) => lift_jxx(inst, addr, il),
+        Instruction::Jnz(_) => lift_jxx(inst, addr, il),
+        Instruction::Jz(_) => lift_jxx(inst, addr, il),
+        Instruction::Jlo(_) => lift_jxx(inst, addr, il),
+        Instruction::Jc(_) => lift_jxx(inst, addr, il),
+        Instruction::Jn(_) => lift_jxx(inst, addr, il),
+        Instruction::Jge(_) => lift_jxx(inst, addr, il),
+        Instruction::Jl(_) => lift_jxx(inst, addr, il),
+        Instruction::Jmp(_) => lift_jxx(inst, addr, il),
 
         // two operand instructions
-        Instruction::Mov(inst) => lift_two_operand(inst, addr, il),
-        Instruction::Add(inst) => lift_two_operand(inst, addr, il),
-        Instruction::Addc(inst) => lift_two_operand(inst, addr, il),
-        Instruction::Subc(inst) => lift_two_operand(inst, addr, il),
-        Instruction::Sub(inst) => lift_two_operand(inst, addr, il),
-        Instruction::Cmp(inst) => lift_two_operand(inst, addr, il),
-        Instruction::Dadd(inst) => lift_two_operand(inst, addr, il),
-        Instruction::Bit(inst) => lift_two_operand(inst, addr, il),
-        Instruction::Bic(inst) => lift_two_operand(inst, addr, il),
-        Instruction::Bis(inst) => lift_two_operand(inst, addr, il),
-        Instruction::Xor(inst) => lift_two_operand(inst, addr, il),
-        Instruction::And(inst) => lift_two_operand(inst, addr, il),
+        Instruction::Mov(inst) => {
+            let src = lift_source_operand(inst.source(), addr, il);
+            two_operand!(inst, il, src);
+            auto_increment!(inst.source(), il);
+            true
+        }
+        Instruction::Add(inst) => {
+            let left = lift_source_operand(inst.source(), addr, il);
+            let right = lift_source_operand(inst.destination(), addr, il);
+            let op = il.add(2, left, right);
+            two_operand!(inst, il, op);
+            auto_increment!(inst.source(), il);
+            true
+        }
+        Instruction::Addc(_) => lift_two_operand(inst, addr, il),
+        Instruction::Subc(_) => lift_two_operand(inst, addr, il),
+        Instruction::Sub(_) => lift_two_operand(inst, addr, il),
+        Instruction::Cmp(_) => lift_two_operand(inst, addr, il),
+        Instruction::Dadd(_) => lift_two_operand(inst, addr, il),
+        Instruction::Bit(_) => lift_two_operand(inst, addr, il),
+        Instruction::Bic(_) => lift_two_operand(inst, addr, il),
+        Instruction::Bis(_) => lift_two_operand(inst, addr, il),
+        Instruction::Xor(_) => lift_two_operand(inst, addr, il),
+        Instruction::And(_) => lift_two_operand(inst, addr, il),
 
         // emulated
-        Instruction::Adc(inst) => lift_emulated(inst, addr, il),
-        Instruction::Br(inst) => lift_emulated(inst, addr, il),
-        Instruction::Clr(inst) => lift_emulated(inst, addr, il),
-        Instruction::Clrc(inst) => lift_emulated(inst, addr, il),
-        Instruction::Clrn(inst) => lift_emulated(inst, addr, il),
-        Instruction::Clrz(inst) => lift_emulated(inst, addr, il),
-        Instruction::Dadc(inst) => lift_emulated(inst, addr, il),
-        Instruction::Dec(inst) => lift_emulated(inst, addr, il),
-        Instruction::Decd(inst) => lift_emulated(inst, addr, il),
-        Instruction::Dint(inst) => lift_emulated(inst, addr, il),
-        Instruction::Eint(inst) => lift_emulated(inst, addr, il),
-        Instruction::Inc(inst) => lift_emulated(inst, addr, il),
-        Instruction::Incd(inst) => lift_emulated(inst, addr, il),
-        Instruction::Inv(inst) => lift_emulated(inst, addr, il),
-        Instruction::Nop(inst) => lift_emulated(inst, addr, il),
-        Instruction::Pop(inst) => lift_emulated(inst, addr, il),
-        Instruction::Ret(inst) => lift_emulated(inst, addr, il),
-        Instruction::Rla(inst) => lift_emulated(inst, addr, il),
-        Instruction::Rlc(inst) => lift_emulated(inst, addr, il),
-        Instruction::Sbc(inst) => lift_emulated(inst, addr, il),
-        Instruction::Setc(inst) => lift_emulated(inst, addr, il),
-        Instruction::Setn(inst) => lift_emulated(inst, addr, il),
-        Instruction::Setz(inst) => lift_emulated(inst, addr, il),
-        Instruction::Tst(inst) => lift_emulated(inst, addr, il),
+        Instruction::Adc(_) => lift_emulated(inst, addr, il),
+        Instruction::Br(_) => lift_emulated(inst, addr, il),
+        Instruction::Clr(_) => lift_emulated(inst, addr, il),
+        Instruction::Clrc(_) => lift_emulated(inst, addr, il),
+        Instruction::Clrn(_) => lift_emulated(inst, addr, il),
+        Instruction::Clrz(_) => lift_emulated(inst, addr, il),
+        Instruction::Dadc(_) => lift_emulated(inst, addr, il),
+        Instruction::Dec(_) => lift_emulated(inst, addr, il),
+        Instruction::Decd(_) => lift_emulated(inst, addr, il),
+        Instruction::Dint(_) => lift_emulated(inst, addr, il),
+        Instruction::Eint(_) => lift_emulated(inst, addr, il),
+        Instruction::Inc(_) => lift_emulated(inst, addr, il),
+        Instruction::Incd(_) => lift_emulated(inst, addr, il),
+        Instruction::Inv(_) => lift_emulated(inst, addr, il),
+        Instruction::Nop(_) => {
+            il.nop().append();
+            true
+        }
+        Instruction::Pop(_) => lift_emulated(inst, addr, il),
+        Instruction::Ret(_) => lift_emulated(inst, addr, il),
+        Instruction::Rla(_) => lift_emulated(inst, addr, il),
+        Instruction::Rlc(_) => lift_emulated(inst, addr, il),
+        Instruction::Sbc(_) => lift_emulated(inst, addr, il),
+        Instruction::Setc(_) => lift_emulated(inst, addr, il),
+        Instruction::Setn(_) => lift_emulated(inst, addr, il),
+        Instruction::Setz(_) => lift_emulated(inst, addr, il),
+        Instruction::Tst(_) => lift_emulated(inst, addr, il),
     }
 }
 
-fn lift_single_operand(inst: &impl SingleOperand, addr: u64, il: &Lifter<Msp430>) -> bool {
-    return false
+impl From<Register> for binaryninja::llil::Register<Register> {
+    fn from(register: Register) -> Self {
+        binaryninja::llil::Register::ArchReg(register)
+    }
 }
 
-fn lift_jxx(inst: &impl Jxx, addr: u64, il: &Lifter<Msp430>) -> bool {
-    return false
+fn lift_single_operand(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) -> bool {
+    match inst {
+        Instruction::Rrc(inst) => true,
+        Instruction::Swpb(inst) => true,
+        Instruction::Rra(inst) => true,
+        Instruction::Sxt(inst) => true,
+        Instruction::Push(inst) => true,
+        Instruction::Call(inst) => true,
+        _ => unreachable!(),
+    }
 }
 
-fn lift_two_operand(inst: &impl TwoOperand, addr: u64, il: &Lifter<Msp430>) -> bool {
-    return false
+fn lift_jxx(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) -> bool {
+    return true;
 }
 
-fn lift_emulated(inst: &impl Emulated, addr: u64, il: &Lifter<Msp430>) -> bool {
-    return false
+fn lift_two_operand(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) -> bool {
+    return true;
+}
+
+fn lift_emulated(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) -> bool {
+    return true;
+}
+
+fn lift_source_operand<'a>(
+    operand: &Operand,
+    addr: u64,
+    il: &'a Lifter<Msp430>,
+) -> binaryninja::llil::Expression<
+    'a,
+    Msp430,
+    Mutable,
+    NonSSA<LiftedNonSSA>,
+    binaryninja::llil::ValueExpr,
+> {
+    match operand {
+        Operand::RegisterDirect(r) => il.reg(2, Register::from(*r as u32)),
+        Operand::Indexed((r, offset)) => il
+            .load(
+                2,
+                il.add(
+                    2,
+                    il.reg(2, Register::from(*r as u32)),
+                    il.const_int(2, *offset as u64),
+                ),
+            )
+            .into_expr(),
+        // should we add offset to addr here rather than lifting to the register since we know where PC is?
+        Operand::Symbolic(offset) => il
+            .load(
+                2,
+                il.add(
+                    2,
+                    il.reg(2, Register::from(0)),
+                    il.const_int(2, *offset as u64),
+                ),
+            )
+            .into_expr(),
+        Operand::Absolute(addr) => il.load(2, il.const_ptr(*addr as u64)).into_expr(),
+        // these are the same, we need to autoincrement in a separate il instruction
+        Operand::RegisterIndirect(r) | Operand::RegisterIndirectAutoIncrement(r) => {
+            il.load(2, il.reg(2, Register::from(*r as u32))).into_expr()
+        }
+        Operand::Immediate(val) => il.const_int(2, *val as u64),
+        Operand::Constant(val) => il.const_int(2, *val as u64),
+    }
+}
+
+fn width_to_size(width: &OperandWidth) -> usize {
+    match width {
+        OperandWidth::Byte => 1,
+        OperandWidth::Word => 2,
+    }
 }
 
 fn offset_to_absolute(addr: u64, offset: i16) -> u64 {
