@@ -1,11 +1,11 @@
 use binaryninja::{
     architecture,
     architecture::{
-        Architecture, BranchInfo, CoreArchitecture, CustomArchitectureHandle,
-        ImplicitRegisterExtend, InstructionInfo, InstructionTextToken,
+        Architecture, BranchInfo, CoreArchitecture, CustomArchitectureHandle, FlagCondition,
+        FlagRole, ImplicitRegisterExtend, InstructionInfo, InstructionTextToken,
         InstructionTextTokenContents,
     },
-    llil::{LiftedExpr, Lifter},
+    llil::{Label, LiftedExpr, Lifter},
     Endianness,
 };
 
@@ -207,8 +207,8 @@ impl Architecture for Msp430 {
     ) -> Option<(usize, bool)> {
         match msp430_asm::decode(data) {
             Ok(inst) => {
-                let lifted = lift_instruction(&inst, addr, il);
-                Some((inst.size(), lifted))
+                lift_instruction(&inst, addr, il);
+                Some((inst.size(), true))
             }
             Err(_) => None,
         }
@@ -247,7 +247,8 @@ impl Architecture for Msp430 {
     }
 
     fn flags(&self) -> Vec<Self::Flag> {
-        Vec::new()
+        let flags = [0, 1, 2, 8];
+        flags.iter().map(|i| Flag::new(*i)).collect::<Vec<Flag>>()
     }
 
     fn flag_write_types(&self) -> Vec<Self::FlagWrite> {
@@ -278,7 +279,10 @@ impl Architecture for Msp430 {
     }
 
     fn flag_from_id(&self, id: u32) -> Option<Self::Flag> {
-        None
+        match id {
+            0 | 1 | 2 | 8 => Some(Flag::new(id)),
+            _ => None,
+        }
     }
 
     fn flag_write_from_id(&self, id: u32) -> Option<Self::FlagWrite> {
@@ -365,21 +369,41 @@ impl architecture::RegisterInfo for Register {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Flag {}
+pub struct Flag {
+    id: u32,
+}
+
+impl Flag {
+    fn new(id: u32) -> Flag {
+        Flag { id }
+    }
+}
 
 impl architecture::Flag for Flag {
     type FlagClass = Flag;
 
     fn name(&self) -> Cow<str> {
-        unimplemented!()
+        match self.id {
+            0 => "c".into(),
+            1 => "z".into(),
+            2 => "n".into(),
+            8 => "v".into(),
+            _ => unimplemented!(),
+        }
     }
 
     fn role(&self, class: Option<Self::FlagClass>) -> architecture::FlagRole {
-        unimplemented!()
+        match self.id {
+            0 => FlagRole::CarryFlagRole,
+            1 => FlagRole::ZeroFlagRole,
+            2 => FlagRole::NegativeSignFlagRole,
+            8 => FlagRole::OverflowFlagRole,
+            _ => unimplemented!(),
+        }
     }
 
     fn id(&self) -> u32 {
-        unimplemented!()
+        self.id
     }
 }
 
@@ -820,7 +844,38 @@ macro_rules! two_operand {
     };
 }
 
-fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) -> bool {
+macro_rules! conditional_jump {
+    ($addr:ident, $inst:ident, $cond:ident, $il:ident) => {
+        let true_addr = ($addr as i64 + $inst.offset() as i64) as u64;
+        let false_addr = $addr + $inst.size() as u64;
+        let mut new_true = None;
+        let mut new_false = None;
+
+        let true_label = $il.label_for_address(true_addr).unwrap_or_else(|| {
+            new_true = Some(Label::new());
+            new_true.as_ref().unwrap()
+        });
+
+        let false_label = $il.label_for_address(false_addr).unwrap_or_else(|| {
+            new_false = Some(Label::new());
+            new_false.as_ref().unwrap()
+        });
+
+        $il.if_expr($cond, true_label, false_label).append();
+
+        if new_true.is_some() {
+            $il.mark_label(&mut new_true.unwrap());
+            $il.jump($il.const_ptr(true_addr)).append();
+        }
+
+        if new_false.is_some() {
+            $il.mark_label(&mut new_false.unwrap());
+            $il.jump($il.const_ptr(false_addr)).append();
+        }
+    };
+}
+
+fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
     match inst {
         Instruction::Rrc(_) => {}
         Instruction::Swpb(_) => {}
@@ -831,21 +886,60 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) -> bool 
             il.push(2, src).append();
             auto_increment!(inst.source(), il);
         }
-        Instruction::Call(_) => {}
+        Instruction::Call(inst) => {
+            // TODO: if immediate mode need to make argument CONST_PTR rather than CONST_INT
+            // TODO: verify the special autoincrement behavior Josh implemented?
+            let src = lift_source_operand(inst.source(), addr, il);
+            il.call(src).append();
+            auto_increment!(inst.source(), il);
+        }
         Instruction::Reti(_) => {
             il.set_reg(2, Register::from(2), il.pop(2)).append();
             il.ret(il.pop(2)).append();
         }
 
         // Jxx instructions
-        Instruction::Jnz(_) => {}
-        Instruction::Jz(_) => {}
-        Instruction::Jlo(_) => {}
-        Instruction::Jc(_) => {}
-        Instruction::Jn(_) => {}
-        Instruction::Jge(_) => {}
-        Instruction::Jl(_) => {}
-        Instruction::Jmp(_) => {}
+        Instruction::Jnz(inst) => {
+            let cond = il.flag_cond(FlagCondition::LLFC_NE);
+            conditional_jump!(addr, inst, cond, il);
+        }
+        Instruction::Jz(inst) => {
+            let cond = il.flag_cond(FlagCondition::LLFC_E);
+            conditional_jump!(addr, inst, cond, il);
+        }
+        Instruction::Jlo(inst) => {
+            let cond = il.flag_cond(FlagCondition::LLFC_ULT);
+            conditional_jump!(addr, inst, cond, il);
+        }
+        Instruction::Jc(inst) => {
+            let cond = il.flag_cond(FlagCondition::LLFC_UGE);
+            conditional_jump!(addr, inst, cond, il);
+        }
+        Instruction::Jn(inst) => {
+            let cond = il.flag_cond(FlagCondition::LLFC_NEG);
+            conditional_jump!(addr, inst, cond, il);
+        }
+        Instruction::Jge(inst) => {
+            let cond = il.flag_cond(FlagCondition::LLFC_SGE);
+            conditional_jump!(addr, inst, cond, il);
+        }
+        Instruction::Jl(inst) => {
+            let cond = il.flag_cond(FlagCondition::LLFC_SLT);
+            conditional_jump!(addr, inst, cond, il);
+        }
+        Instruction::Jmp(inst) => {
+            let offset = inst.offset();
+            let fixed_addr = (addr as i64 + offset as i64) as u64;
+            let label = il.label_for_address(fixed_addr);
+            match label {
+                Some(label) => {
+                    il.goto(label).append();
+                }
+                None => {
+                    il.jump(il.const_ptr(fixed_addr)).append();
+                }
+            }
+        }
 
         // two operand instructions
         Instruction::Mov(inst) => {
@@ -869,7 +963,13 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) -> bool 
             two_operand!(inst, il, op);
             auto_increment!(inst.source(), il);
         }
-        Instruction::Cmp(inst) => {}
+        Instruction::Cmp(inst) => {
+            let src = lift_source_operand(inst.source(), addr, il);
+            let dest = lift_source_operand(inst.destination(), addr, il);
+            let op = il.sub(2, dest, src);
+            two_operand!(inst, il, op);
+            auto_increment!(inst.source(), il);
+        }
         Instruction::Dadd(inst) => {}
         Instruction::Bit(inst) => {
             let src = lift_source_operand(inst.source(), addr, il);
@@ -911,9 +1011,15 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) -> bool 
         Instruction::Adc(_) => {}
         Instruction::Br(_) => {}
         Instruction::Clr(_) => {}
-        Instruction::Clrc(_) => {}
-        Instruction::Clrn(_) => {}
-        Instruction::Clrz(_) => {}
+        Instruction::Clrc(_) => {
+            il.set_flag(Flag::new(0), il.const_int(0, 1)).append();
+        }
+        Instruction::Clrn(_) => {
+            il.set_flag(Flag::new(2), il.const_int(0, 1)).append();
+        }
+        Instruction::Clrz(_) => {
+            il.set_flag(Flag::new(1), il.const_int(0, 1)).append();
+        }
         Instruction::Dadc(_) => {}
         Instruction::Dec(_) => {}
         Instruction::Decd(_) => {}
@@ -938,13 +1044,17 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) -> bool 
         Instruction::Rla(_) => {}
         Instruction::Rlc(_) => {}
         Instruction::Sbc(_) => {}
-        Instruction::Setc(_) => {}
-        Instruction::Setn(_) => {}
-        Instruction::Setz(_) => {}
+        Instruction::Setc(_) => {
+            il.set_flag(Flag::new(0), il.const_int(0, 1)).append();
+        }
+        Instruction::Setn(_) => {
+            il.set_flag(Flag::new(2), il.const_int(0, 1)).append();
+        }
+        Instruction::Setz(_) => {
+            il.set_flag(Flag::new(1), il.const_int(0, 1)).append();
+        }
         Instruction::Tst(_) => {}
-    };
-
-    true
+    }
 }
 
 impl From<Register> for binaryninja::llil::Register<Register> {
