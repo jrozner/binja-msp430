@@ -1,3 +1,5 @@
+use crate::flag::Flag;
+
 use binaryninja::{
     architecture,
     architecture::{
@@ -15,9 +17,8 @@ use msp430_asm::{
 };
 
 use binaryninja::llil::{LiftedNonSSA, Mutable, NonSSA};
-use log::info;
+use log::{info, error};
 use std::borrow::Cow;
-use std::collections::HashMap;
 
 const MIN_MNEMONIC: usize = 9;
 
@@ -247,8 +248,7 @@ impl Architecture for Msp430 {
     }
 
     fn flags(&self) -> Vec<Self::Flag> {
-        let flags = [0, 1, 2, 8];
-        flags.iter().map(|i| Flag::new(*i)).collect::<Vec<Flag>>()
+        vec![Flag::C, Flag::Z, Flag::N, Flag::V]
     }
 
     fn flag_write_types(&self) -> Vec<Self::FlagWrite> {
@@ -279,9 +279,12 @@ impl Architecture for Msp430 {
     }
 
     fn flag_from_id(&self, id: u32) -> Option<Self::Flag> {
-        match id {
-            0 | 1 | 2 | 8 => Some(Flag::new(id)),
-            _ => None,
+        match id.try_into() {
+            Ok(flag) => Some(flag),
+            Err(_) => {
+                error!("invalid flag id {}", id);
+                None
+            }
         }
     }
 
@@ -365,97 +368,6 @@ impl architecture::RegisterInfo for Register {
 
     fn implicit_extend(&self) -> ImplicitRegisterExtend {
         ImplicitRegisterExtend::NoExtend
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Flag {
-    id: u32,
-}
-
-impl Flag {
-    fn new(id: u32) -> Flag {
-        Flag { id }
-    }
-}
-
-impl architecture::Flag for Flag {
-    type FlagClass = Flag;
-
-    fn name(&self) -> Cow<str> {
-        match self.id {
-            0 => "c".into(),
-            1 => "z".into(),
-            2 => "n".into(),
-            8 => "v".into(),
-            _ => unimplemented!(),
-        }
-    }
-
-    fn role(&self, class: Option<Self::FlagClass>) -> architecture::FlagRole {
-        match self.id {
-            0 => FlagRole::CarryFlagRole,
-            1 => FlagRole::ZeroFlagRole,
-            2 => FlagRole::NegativeSignFlagRole,
-            8 => FlagRole::OverflowFlagRole,
-            _ => unimplemented!(),
-        }
-    }
-
-    fn id(&self) -> u32 {
-        self.id
-    }
-}
-
-impl architecture::FlagClass for Flag {
-    fn name(&self) -> Cow<str> {
-        unimplemented!()
-    }
-
-    fn id(&self) -> u32 {
-        unimplemented!()
-    }
-}
-
-impl architecture::FlagGroup for Flag {
-    type FlagType = Flag;
-    type FlagClass = Flag;
-
-    fn name(&self) -> Cow<str> {
-        unimplemented!()
-    }
-
-    fn id(&self) -> u32 {
-        unimplemented!()
-    }
-
-    fn flags_required(&self) -> Vec<Self::FlagType> {
-        unimplemented!()
-    }
-
-    fn flag_conditions(&self) -> HashMap<Self, architecture::FlagCondition> {
-        unimplemented!()
-    }
-}
-
-impl architecture::FlagWrite for Flag {
-    type FlagType = Flag;
-    type FlagClass = Flag;
-
-    fn name(&self) -> Cow<str> {
-        unimplemented!()
-    }
-
-    fn class(&self) -> Option<Self::FlagClass> {
-        unimplemented!()
-    }
-
-    fn id(&self) -> u32 {
-        unimplemented!()
-    }
-
-    fn flags_written(&self) -> Vec<Self::FlagType> {
-        unimplemented!()
     }
 }
 
@@ -1012,13 +924,13 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
         Instruction::Br(_) => {}
         Instruction::Clr(_) => {}
         Instruction::Clrc(_) => {
-            il.set_flag(Flag::new(0), il.const_int(0, 1)).append();
+            il.set_flag(Flag::C, il.const_int(0, 1)).append();
         }
         Instruction::Clrn(_) => {
-            il.set_flag(Flag::new(2), il.const_int(0, 1)).append();
+            il.set_flag(Flag::N, il.const_int(0, 1)).append();
         }
         Instruction::Clrz(_) => {
-            il.set_flag(Flag::new(1), il.const_int(0, 1)).append();
+            il.set_flag(Flag::Z, il.const_int(0, 1)).append();
         }
         Instruction::Dadc(_) => {}
         Instruction::Dec(_) => {}
@@ -1045,13 +957,13 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
         Instruction::Rlc(_) => {}
         Instruction::Sbc(_) => {}
         Instruction::Setc(_) => {
-            il.set_flag(Flag::new(0), il.const_int(0, 1)).append();
+            il.set_flag(Flag::C, il.const_int(0, 1)).append();
         }
         Instruction::Setn(_) => {
-            il.set_flag(Flag::new(2), il.const_int(0, 1)).append();
+            il.set_flag(Flag::N, il.const_int(0, 1)).append();
         }
         Instruction::Setz(_) => {
-            il.set_flag(Flag::new(1), il.const_int(0, 1)).append();
+            il.set_flag(Flag::Z, il.const_int(0, 1)).append();
         }
         Instruction::Tst(_) => {}
     }

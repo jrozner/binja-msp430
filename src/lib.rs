@@ -10,6 +10,7 @@ use binaryninja::{
 };
 
 mod architecture;
+mod flag;
 
 use architecture::Msp430;
 
