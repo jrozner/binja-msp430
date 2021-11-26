@@ -1,11 +1,11 @@
 use crate::flag::Flag;
+use crate::register::Register;
 
 use binaryninja::{
     architecture,
     architecture::{
         Architecture, BranchInfo, CoreArchitecture, CustomArchitectureHandle, FlagCondition,
-        FlagRole, ImplicitRegisterExtend, InstructionInfo, InstructionTextToken,
-        InstructionTextTokenContents,
+        FlagRole, InstructionInfo, InstructionTextToken, InstructionTextTokenContents,
     },
     llil::{Label, LiftedExpr, Lifter},
     Endianness,
@@ -17,7 +17,7 @@ use msp430_asm::{
 };
 
 use binaryninja::llil::{LiftedNonSSA, Mutable, NonSSA};
-use log::{info, error};
+use log::{error, info};
 use std::borrow::Cow;
 
 const MIN_MNEMONIC: usize = 9;
@@ -308,66 +308,6 @@ impl Architecture for Msp430 {
 impl AsRef<CoreArchitecture> for Msp430 {
     fn as_ref(&self) -> &CoreArchitecture {
         &self.handle
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct Register {
-    id: u32,
-}
-
-impl From<u32> for Register {
-    fn from(id: u32) -> Self {
-        Register::new(id)
-    }
-}
-
-impl Register {
-    fn new(id: u32) -> Register {
-        Register { id: id }
-    }
-}
-
-impl architecture::Register for Register {
-    type InfoType = Self;
-
-    fn name(&self) -> Cow<'_, str> {
-        match self.id {
-            0 => "pc".into(),
-            1 => "sp".into(),
-            2 => "sr".into(),
-            3 => "cg".into(),
-            4..=15 => format!("r{}", self.id).into(),
-            _ => unreachable!(),
-        }
-    }
-
-    fn info(&self) -> Self::InfoType {
-        *self
-    }
-
-    fn id(&self) -> u32 {
-        self.id
-    }
-}
-
-impl architecture::RegisterInfo for Register {
-    type RegType = Self;
-
-    fn parent(&self) -> Option<Self::RegType> {
-        None
-    }
-
-    fn size(&self) -> usize {
-        2
-    }
-
-    fn offset(&self) -> usize {
-        0
-    }
-
-    fn implicit_extend(&self) -> ImplicitRegisterExtend {
-        ImplicitRegisterExtend::NoExtend
     }
 }
 
@@ -966,12 +906,6 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
             il.set_flag(Flag::Z, il.const_int(0, 1)).append();
         }
         Instruction::Tst(_) => {}
-    }
-}
-
-impl From<Register> for binaryninja::llil::Register<Register> {
-    fn from(register: Register) -> Self {
-        binaryninja::llil::Register::ArchReg(register)
     }
 }
 

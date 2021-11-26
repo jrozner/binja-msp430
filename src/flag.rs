@@ -119,4 +119,3 @@ impl architecture::FlagWrite for Flag {
         unimplemented!()
     }
 }
-

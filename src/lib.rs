@@ -11,6 +11,7 @@ use binaryninja::{
 
 mod architecture;
 mod flag;
+mod register;
 
 use architecture::Msp430;
 
