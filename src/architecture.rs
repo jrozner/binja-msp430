@@ -1,4 +1,4 @@
-use crate::flag::{Flag, FlagWrite, FlagClass, FlagGroup};
+use crate::flag::{Flag, FlagClass, FlagGroup, FlagWrite};
 use crate::register::Register;
 
 use binaryninja::{
@@ -240,11 +240,45 @@ impl Architecture for Msp430 {
     }
 
     fn registers_all(&self) -> Vec<Self::Register> {
-        (0..=15).map(|i| Register::new(i)).collect()
+        vec![
+            Register::Pc,
+            Register::Sp,
+            Register::Sr,
+            Register::Cg,
+            Register::R4,
+            Register::R5,
+            Register::R6,
+            Register::R7,
+            Register::R8,
+            Register::R9,
+            Register::R10,
+            Register::R11,
+            Register::R12,
+            Register::R13,
+            Register::R14,
+            Register::R15,
+        ]
     }
 
     fn registers_full_width(&self) -> Vec<Self::Register> {
-        (0..=15).map(|i| Register::new(i)).collect()
+        vec![
+            Register::Pc,
+            Register::Sp,
+            Register::Sr,
+            Register::Cg,
+            Register::R4,
+            Register::R5,
+            Register::R6,
+            Register::R7,
+            Register::R8,
+            Register::R9,
+            Register::R10,
+            Register::R11,
+            Register::R12,
+            Register::R13,
+            Register::R14,
+            Register::R15,
+        ]
     }
 
     fn registers_global(&self) -> Vec<Self::Register> {
@@ -272,7 +306,7 @@ impl Architecture for Msp430 {
     }
 
     fn stack_pointer_reg(&self) -> Option<Self::Register> {
-        Some(Register::new(1))
+        Some(Register::Sp)
     }
 
     fn link_reg(&self) -> Option<Self::Register> {
@@ -280,9 +314,12 @@ impl Architecture for Msp430 {
     }
 
     fn register_from_id(&self, id: u32) -> Option<Self::Register> {
-        match id {
-            0..=15 => Some(Register::new(id)),
-            _ => None,
+        match id.try_into() {
+            Ok(register) => Some(register),
+            Err(_) => {
+                error!("invalid register id {}", id);
+                None
+            }
         }
     }
 
@@ -668,10 +705,10 @@ macro_rules! auto_increment {
         if let Operand::RegisterIndirectAutoIncrement(r) = $src {
             $il.set_reg(
                 2,
-                Register::from(*r as u32),
+                Register::try_from(*r as u32).unwrap(),
                 $il.add(
                     2,
-                    $il.reg(2, Register::from(*r as u32)),
+                    $il.reg(2, Register::try_from(*r as u32).unwrap()),
                     $il.const_int(2, 2),
                 ),
             )
@@ -683,24 +720,22 @@ macro_rules! auto_increment {
 macro_rules! two_operand {
     ($inst:ident, $il:ident, $op:ident) => {
         match $inst.destination() {
-            Operand::RegisterDirect(r) => $il.set_reg(2, Register::from(*r as u32), $op).append(),
+            Operand::RegisterDirect(r) => $il
+                .set_reg(2, Register::try_from(*r as u32).unwrap(), $op)
+                .append(),
             Operand::Indexed((r, offset)) => $il
                 .store(
                     2,
                     $il.add(
                         2,
-                        $il.reg(2, Register::from(*r as u32)),
+                        $il.reg(2, Register::try_from(*r as u32).unwrap()),
                         $il.const_int(2, *offset as u64),
                     ),
                     $op,
                 )
                 .append(),
             Operand::Symbolic(offset) => $il
-                .store(
-                    2,
-                    $il.add(2, $il.reg(2, Register::from(0)), *offset as u64),
-                    $op,
-                )
+                .store(2, $il.add(2, $il.reg(2, Register::Pc), *offset as u64), $op)
                 .append(),
             Operand::Absolute(val) => $il.store(2, $il.const_ptr(*val as u64), $op).append(),
             _ => {
@@ -713,24 +748,22 @@ macro_rules! two_operand {
 macro_rules! emulated {
     ($inst:ident, $il:ident, $op:ident) => {
         match $inst.destination() {
-            Some(Operand::RegisterDirect(r)) => $il.set_reg(2, Register::from(*r as u32), $op).append(),
+            Some(Operand::RegisterDirect(r)) => $il
+                .set_reg(2, Register::try_from(*r as u32).unwrap(), $op)
+                .append(),
             Some(Operand::Indexed((r, offset))) => $il
                 .store(
                     2,
                     $il.add(
                         2,
-                        $il.reg(2, Register::from(*r as u32)),
+                        $il.reg(2, Register::try_from(*r as u32).unwrap()),
                         $il.const_int(2, *offset as u64),
                     ),
                     $op,
                 )
                 .append(),
             Some(Operand::Symbolic(offset)) => $il
-                .store(
-                    2,
-                    $il.add(2, $il.reg(2, Register::from(0)), *offset as u64),
-                    $op,
-                )
+                .store(2, $il.add(2, $il.reg(2, Register::Pc), *offset as u64), $op)
                 .append(),
             Some(Operand::Absolute(val)) => $il.store(2, $il.const_ptr(*val as u64), $op).append(),
             _ => {
@@ -790,7 +823,9 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
             auto_increment!(inst.source(), il);
         }
         Instruction::Reti(_) => {
-            il.set_reg(2, Register::from(2), il.pop(2)).with_flag_write(FlagWrite::All).append();
+            il.set_reg(2, Register::Sr, il.pop(2))
+                .with_flag_write(FlagWrite::All)
+                .append();
             il.ret(il.pop(2)).append();
         }
 
@@ -862,7 +897,10 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
         Instruction::Cmp(inst) => {
             let src = lift_source_operand(inst.source(), addr, il);
             let dest = lift_source_operand(inst.destination(), addr, il);
-            let op = il.sub(2, dest, src).with_flag_write(FlagWrite::All).append();
+            let op = il
+                .sub(2, dest, src)
+                .with_flag_write(FlagWrite::All)
+                .append();
             auto_increment!(inst.source(), il);
         }
         Instruction::Dadd(inst) => {}
@@ -921,24 +959,32 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
         Instruction::Dadc(_) => {}
         Instruction::Dec(inst) => {
             let dest = lift_source_operand(&inst.destination().unwrap(), addr, il);
-            let op = il.sub(2, dest, il.const_int(2, 1)).with_flag_write(FlagWrite::All);
+            let op = il
+                .sub(2, dest, il.const_int(2, 1))
+                .with_flag_write(FlagWrite::All);
             emulated!(inst, il, op);
         }
         Instruction::Decd(inst) => {
             let dest = lift_source_operand(&inst.destination().unwrap(), addr, il);
-            let op = il.sub(2, dest, il.const_int(2, 2)).with_flag_write(FlagWrite::All);
+            let op = il
+                .sub(2, dest, il.const_int(2, 2))
+                .with_flag_write(FlagWrite::All);
             emulated!(inst, il, op);
         }
         Instruction::Dint(_) => {}
         Instruction::Eint(_) => {}
         Instruction::Inc(inst) => {
             let dest = lift_source_operand(&inst.destination().unwrap(), addr, il);
-            let op = il.add(2, dest, il.const_int(2, 1)).with_flag_write(FlagWrite::All);
+            let op = il
+                .add(2, dest, il.const_int(2, 1))
+                .with_flag_write(FlagWrite::All);
             emulated!(inst, il, op);
         }
         Instruction::Incd(inst) => {
             let dest = lift_source_operand(&inst.destination().unwrap(), addr, il);
-            let op = il.add(2, dest, il.const_int(2, 2)).with_flag_write(FlagWrite::All);
+            let op = il
+                .add(2, dest, il.const_int(2, 2))
+                .with_flag_write(FlagWrite::All);
             emulated!(inst, il, op);
         }
         Instruction::Inv(_) => {}
@@ -947,7 +993,8 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
         }
         Instruction::Pop(inst) => {
             if let Some(Operand::RegisterDirect(r)) = inst.destination() {
-                il.set_reg(2, Register::from(*r as u32), il.pop(2)).append();
+                il.set_reg(2, Register::try_from(*r as u32).unwrap(), il.pop(2))
+                    .append();
             } else {
                 info!("pop: invalid destination operand");
             }
@@ -969,7 +1016,9 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
         }
         Instruction::Tst(inst) => {
             let dest = lift_source_operand(&inst.destination().unwrap(), addr, il);
-            il.sub(2, dest, il.const_int(2, 0)).with_flag_write(FlagWrite::All).append();
+            il.sub(2, dest, il.const_int(2, 0))
+                .with_flag_write(FlagWrite::All)
+                .append();
         }
     }
 }
@@ -986,13 +1035,13 @@ fn lift_source_operand<'a>(
     binaryninja::llil::ValueExpr,
 > {
     match operand {
-        Operand::RegisterDirect(r) => il.reg(2, Register::from(*r as u32)),
+        Operand::RegisterDirect(r) => il.reg(2, Register::try_from(*r as u32).unwrap()),
         Operand::Indexed((r, offset)) => il
             .load(
                 2,
                 il.add(
                     2,
-                    il.reg(2, Register::from(*r as u32)),
+                    il.reg(2, Register::try_from(*r as u32).unwrap()),
                     il.const_int(2, *offset as u64),
                 ),
             )
@@ -1001,18 +1050,14 @@ fn lift_source_operand<'a>(
         Operand::Symbolic(offset) => il
             .load(
                 2,
-                il.add(
-                    2,
-                    il.reg(2, Register::from(0)),
-                    il.const_int(2, *offset as u64),
-                ),
+                il.add(2, il.reg(2, Register::Pc), il.const_int(2, *offset as u64)),
             )
             .into_expr(),
         Operand::Absolute(addr) => il.load(2, il.const_ptr(*addr as u64)).into_expr(),
         // these are the same, we need to autoincrement in a separate il instruction
-        Operand::RegisterIndirect(r) | Operand::RegisterIndirectAutoIncrement(r) => {
-            il.load(2, il.reg(2, Register::from(*r as u32))).into_expr()
-        }
+        Operand::RegisterIndirect(r) | Operand::RegisterIndirectAutoIncrement(r) => il
+            .load(2, il.reg(2, Register::try_from(*r as u32).unwrap()))
+            .into_expr(),
         Operand::Immediate(val) => il.const_int(2, *val as u64),
         Operand::Constant(val) => il.const_int(2, *val as u64),
     }
