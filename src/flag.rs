@@ -13,7 +13,7 @@ pub enum Flag {
 }
 
 impl architecture::Flag for Flag {
-    type FlagClass = Flag;
+    type FlagClass = FlagClass;
 
     fn name(&self) -> Cow<str> {
         match self {
@@ -56,7 +56,10 @@ impl TryFrom<u32> for Flag {
     }
 }
 
-impl architecture::FlagClass for Flag {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct FlagClass {}
+
+impl architecture::FlagClass for FlagClass {
     fn name(&self) -> Cow<str> {
         unimplemented!()
     }
@@ -67,23 +70,14 @@ impl architecture::FlagClass for Flag {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum FlagGroup {
-    None,
-    All,
-}
+pub enum FlagGroup {}
 
-impl architecture::FlagGroup for Flag {
+impl architecture::FlagGroup for FlagGroup {
     type FlagType = Flag;
-    type FlagClass = Flag;
+    type FlagClass = FlagClass;
 
     fn name(&self) -> Cow<str> {
         unimplemented!();
-        /*
-        match self {
-            Self::None => "none".into(),
-            Self::All => "all".into(),
-        }
-         */
     }
 
     fn id(&self) -> u32 {
@@ -94,28 +88,55 @@ impl architecture::FlagGroup for Flag {
         unimplemented!()
     }
 
-    fn flag_conditions(&self) -> HashMap<Self, architecture::FlagCondition> {
+    fn flag_conditions(&self) -> HashMap<Self::FlagClass, architecture::FlagCondition> {
         unimplemented!()
     }
 }
 
-impl architecture::FlagWrite for Flag {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum FlagWrite {
+    All,
+    Cnz,
+}
+
+impl architecture::FlagWrite for FlagWrite {
     type FlagType = Flag;
-    type FlagClass = Flag;
+    type FlagClass = FlagClass;
 
     fn name(&self) -> Cow<str> {
-        unimplemented!()
+        match self {
+            Self::All => "*".into(),
+            Self::Cnz => "cnz".into(),
+        }
     }
 
     fn class(&self) -> Option<Self::FlagClass> {
-        unimplemented!()
+        None
     }
 
     fn id(&self) -> u32 {
-        unimplemented!()
+        match self {
+            Self::All => 1,
+            Self::Cnz => 2,
+        }
     }
 
     fn flags_written(&self) -> Vec<Self::FlagType> {
-        unimplemented!()
+        match self {
+            Self::All => vec![Flag::C, Flag::N, Flag::V, Flag::Z],
+            Self::Cnz => vec![Flag::C, Flag::N, Flag::Z],
+        }
+    }
+}
+
+impl TryFrom<u32> for FlagWrite {
+    type Error = ();
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            1 => Ok(Self::All),
+            2 => Ok(Self::Cnz),
+            _ => Err(()),
+        }
     }
 }

@@ -1,11 +1,10 @@
-use crate::flag::Flag;
+use crate::flag::{Flag, FlagWrite, FlagClass, FlagGroup};
 use crate::register::Register;
 
 use binaryninja::{
-    architecture,
     architecture::{
         Architecture, BranchInfo, CoreArchitecture, CustomArchitectureHandle, FlagCondition,
-        FlagRole, InstructionInfo, InstructionTextToken, InstructionTextTokenContents,
+        InstructionInfo, InstructionTextToken, InstructionTextTokenContents,
     },
     llil::{Label, LiftedExpr, Lifter},
     Endianness,
@@ -18,7 +17,6 @@ use msp430_asm::{
 
 use binaryninja::llil::{LiftedNonSSA, Mutable, NonSSA};
 use log::{error, info};
-use std::borrow::Cow;
 
 const MIN_MNEMONIC: usize = 9;
 
@@ -41,9 +39,9 @@ impl Architecture for Msp430 {
     type RegisterInfo = Register;
     type Register = Register;
     type Flag = Flag;
-    type FlagWrite = Flag;
-    type FlagClass = Flag;
-    type FlagGroup = Flag;
+    type FlagWrite = FlagWrite;
+    type FlagClass = FlagClass;
+    type FlagGroup = FlagGroup;
     type InstructionTextContainer = Vec<InstructionTextToken>;
 
     fn endianness(&self) -> Endianness {
@@ -217,10 +215,20 @@ impl Architecture for Msp430 {
 
     fn flags_required_for_flag_condition(
         &self,
-        condition: architecture::FlagCondition,
+        condition: FlagCondition,
         class: Option<Self::FlagClass>,
     ) -> Vec<Self::Flag> {
-        Vec::new()
+        match condition {
+            FlagCondition::LLFC_UGE => vec![Flag::C],
+            FlagCondition::LLFC_ULT => vec![Flag::C],
+            FlagCondition::LLFC_SGE => vec![Flag::N, Flag::V],
+            FlagCondition::LLFC_SLT => vec![Flag::N, Flag::V],
+            FlagCondition::LLFC_E => vec![Flag::Z],
+            FlagCondition::LLFC_NE => vec![Flag::Z],
+            FlagCondition::LLFC_NEG => vec![Flag::N],
+            FlagCondition::LLFC_POS => vec![Flag::N],
+            _ => vec![],
+        }
     }
 
     fn flag_group_llil<'a>(
@@ -252,7 +260,7 @@ impl Architecture for Msp430 {
     }
 
     fn flag_write_types(&self) -> Vec<Self::FlagWrite> {
-        Vec::new()
+        vec![FlagWrite::All, FlagWrite::Cnz]
     }
 
     fn flag_classes(&self) -> Vec<Self::FlagClass> {
@@ -289,14 +297,20 @@ impl Architecture for Msp430 {
     }
 
     fn flag_write_from_id(&self, id: u32) -> Option<Self::FlagWrite> {
+        match id.try_into() {
+            Ok(flag_write) => Some(flag_write),
+            Err(_) => {
+                error!("invalid flag write id {}", id);
+                None
+            }
+        }
+    }
+
+    fn flag_class_from_id(&self, _: u32) -> Option<Self::FlagClass> {
         None
     }
 
-    fn flag_class_from_id(&self, id: u32) -> Option<Self::FlagClass> {
-        None
-    }
-
-    fn flag_group_from_id(&self, id: u32) -> Option<Self::FlagGroup> {
+    fn flag_group_from_id(&self, _: u32) -> Option<Self::FlagGroup> {
         None
     }
 
@@ -696,6 +710,36 @@ macro_rules! two_operand {
     };
 }
 
+macro_rules! emulated {
+    ($inst:ident, $il:ident, $op:ident) => {
+        match $inst.destination() {
+            Some(Operand::RegisterDirect(r)) => $il.set_reg(2, Register::from(*r as u32), $op).append(),
+            Some(Operand::Indexed((r, offset))) => $il
+                .store(
+                    2,
+                    $il.add(
+                        2,
+                        $il.reg(2, Register::from(*r as u32)),
+                        $il.const_int(2, *offset as u64),
+                    ),
+                    $op,
+                )
+                .append(),
+            Some(Operand::Symbolic(offset)) => $il
+                .store(
+                    2,
+                    $il.add(2, $il.reg(2, Register::from(0)), *offset as u64),
+                    $op,
+                )
+                .append(),
+            Some(Operand::Absolute(val)) => $il.store(2, $il.const_ptr(*val as u64), $op).append(),
+            _ => {
+                unreachable!()
+            }
+        };
+    };
+}
+
 macro_rules! conditional_jump {
     ($addr:ident, $inst:ident, $cond:ident, $il:ident) => {
         let true_addr = ($addr as i64 + $inst.offset() as i64) as u64;
@@ -746,7 +790,7 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
             auto_increment!(inst.source(), il);
         }
         Instruction::Reti(_) => {
-            il.set_reg(2, Register::from(2), il.pop(2)).append();
+            il.set_reg(2, Register::from(2), il.pop(2)).with_flag_write(FlagWrite::All).append();
             il.ret(il.pop(2)).append();
         }
 
@@ -802,7 +846,7 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
         Instruction::Add(inst) => {
             let src = lift_source_operand(inst.source(), addr, il);
             let dest = lift_source_operand(inst.destination(), addr, il);
-            let op = il.add(2, src, dest);
+            let op = il.add(2, src, dest).with_flag_write(FlagWrite::All);
             two_operand!(inst, il, op);
             auto_increment!(inst.source(), il);
         }
@@ -811,15 +855,14 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
         Instruction::Sub(inst) => {
             let src = lift_source_operand(inst.source(), addr, il);
             let dest = lift_source_operand(inst.destination(), addr, il);
-            let op = il.sub(2, src, dest);
+            let op = il.sub(2, src, dest).with_flag_write(FlagWrite::All);
             two_operand!(inst, il, op);
             auto_increment!(inst.source(), il);
         }
         Instruction::Cmp(inst) => {
             let src = lift_source_operand(inst.source(), addr, il);
             let dest = lift_source_operand(inst.destination(), addr, il);
-            let op = il.sub(2, dest, src);
-            two_operand!(inst, il, op);
+            let op = il.sub(2, dest, src).with_flag_write(FlagWrite::All).append();
             auto_increment!(inst.source(), il);
         }
         Instruction::Dadd(inst) => {}
@@ -862,7 +905,10 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
         // emulated
         Instruction::Adc(_) => {}
         Instruction::Br(_) => {}
-        Instruction::Clr(_) => {}
+        Instruction::Clr(inst) => {
+            let op = il.const_int(2, 0);
+            emulated!(inst, il, op);
+        }
         Instruction::Clrc(_) => {
             il.set_flag(Flag::C, il.const_int(0, 1)).append();
         }
@@ -873,12 +919,28 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
             il.set_flag(Flag::Z, il.const_int(0, 1)).append();
         }
         Instruction::Dadc(_) => {}
-        Instruction::Dec(_) => {}
-        Instruction::Decd(_) => {}
+        Instruction::Dec(inst) => {
+            let dest = lift_source_operand(&inst.destination().unwrap(), addr, il);
+            let op = il.sub(2, dest, il.const_int(2, 1)).with_flag_write(FlagWrite::All);
+            emulated!(inst, il, op);
+        }
+        Instruction::Decd(inst) => {
+            let dest = lift_source_operand(&inst.destination().unwrap(), addr, il);
+            let op = il.sub(2, dest, il.const_int(2, 2)).with_flag_write(FlagWrite::All);
+            emulated!(inst, il, op);
+        }
         Instruction::Dint(_) => {}
         Instruction::Eint(_) => {}
-        Instruction::Inc(_) => {}
-        Instruction::Incd(_) => {}
+        Instruction::Inc(inst) => {
+            let dest = lift_source_operand(&inst.destination().unwrap(), addr, il);
+            let op = il.add(2, dest, il.const_int(2, 1)).with_flag_write(FlagWrite::All);
+            emulated!(inst, il, op);
+        }
+        Instruction::Incd(inst) => {
+            let dest = lift_source_operand(&inst.destination().unwrap(), addr, il);
+            let op = il.add(2, dest, il.const_int(2, 2)).with_flag_write(FlagWrite::All);
+            emulated!(inst, il, op);
+        }
         Instruction::Inv(_) => {}
         Instruction::Nop(_) => {
             il.nop().append();
@@ -905,7 +967,10 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
         Instruction::Setz(_) => {
             il.set_flag(Flag::Z, il.const_int(0, 1)).append();
         }
-        Instruction::Tst(_) => {}
+        Instruction::Tst(inst) => {
+            let dest = lift_source_operand(&inst.destination().unwrap(), addr, il);
+            il.sub(2, dest, il.const_int(2, 0)).with_flag_write(FlagWrite::All).append();
+        }
     }
 }
 
