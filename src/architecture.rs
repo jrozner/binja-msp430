@@ -364,12 +364,12 @@ impl AsRef<CoreArchitecture> for Msp430 {
 
 fn generate_tokens(inst: &Instruction, addr: u64) -> Vec<InstructionTextToken> {
     match inst {
-        Instruction::Rrc(inst) => generate_single_operand_tokens(inst, addr),
-        Instruction::Swpb(inst) => generate_single_operand_tokens(inst, addr),
-        Instruction::Rra(inst) => generate_single_operand_tokens(inst, addr),
-        Instruction::Sxt(inst) => generate_single_operand_tokens(inst, addr),
-        Instruction::Push(inst) => generate_single_operand_tokens(inst, addr),
-        Instruction::Call(inst) => generate_single_operand_tokens(inst, addr),
+        Instruction::Rrc(inst) => generate_single_operand_tokens(inst, addr, false),
+        Instruction::Swpb(inst) => generate_single_operand_tokens(inst, addr, false),
+        Instruction::Rra(inst) => generate_single_operand_tokens(inst, addr, false),
+        Instruction::Sxt(inst) => generate_single_operand_tokens(inst, addr, false),
+        Instruction::Push(inst) => generate_single_operand_tokens(inst, addr, false),
+        Instruction::Call(inst) => generate_single_operand_tokens(inst, addr, false),
         Instruction::Reti(_) => vec![InstructionTextToken::new(
             InstructionTextTokenContents::Instruction,
             format!("{}", "reti"),
@@ -430,6 +430,7 @@ fn generate_tokens(inst: &Instruction, addr: u64) -> Vec<InstructionTextToken> {
 fn generate_single_operand_tokens(
     inst: &impl SingleOperand,
     addr: u64,
+    call: bool,
 ) -> Vec<InstructionTextToken> {
     let mut res = vec![InstructionTextToken::new(
         InstructionTextTokenContents::Instruction,
@@ -446,7 +447,7 @@ fn generate_single_operand_tokens(
         ))
     }
 
-    res.extend_from_slice(&generate_operand_tokens(inst.source(), addr));
+    res.extend_from_slice(&generate_operand_tokens(inst.source(), addr, call));
 
     res
 }
@@ -470,7 +471,7 @@ fn generate_jxx_tokens(inst: &impl Jxx, addr: u64) -> Vec<InstructionTextToken> 
     }
 
     res.push(InstructionTextToken::new(
-        InstructionTextTokenContents::PossibleAddress(fixed_addr),
+        InstructionTextTokenContents::CodeRelativeAddress(fixed_addr),
         format!("0x{:4x}", fixed_addr),
     ));
 
@@ -493,12 +494,12 @@ fn generate_two_operand_tokens(inst: &impl TwoOperand, addr: u64) -> Vec<Instruc
         ))
     }
 
-    res.extend_from_slice(&generate_operand_tokens(inst.source(), addr));
+    res.extend_from_slice(&generate_operand_tokens(inst.source(), addr, false));
     res.push(InstructionTextToken::new(
         InstructionTextTokenContents::OperandSeparator,
         ", ",
     ));
-    res.extend_from_slice(&generate_operand_tokens(inst.destination(), addr));
+    res.extend_from_slice(&generate_operand_tokens(inst.destination(), addr, false));
 
     res
 }
@@ -520,13 +521,17 @@ fn generate_emulated_tokens(inst: &impl Emulated, addr: u64) -> Vec<InstructionT
     }
 
     if inst.destination().is_some() {
-        res.extend_from_slice(&generate_operand_tokens(&inst.destination().unwrap(), addr))
+        res.extend_from_slice(&generate_operand_tokens(
+            &inst.destination().unwrap(),
+            addr,
+            false,
+        ))
     }
 
     res
 }
 
-fn generate_operand_tokens(source: &Operand, addr: u64) -> Vec<InstructionTextToken> {
+fn generate_operand_tokens(source: &Operand, addr: u64, call: bool) -> Vec<InstructionTextToken> {
     match source {
         Operand::RegisterDirect(r) => match r {
             0 => vec![InstructionTextToken::new(
@@ -662,26 +667,35 @@ fn generate_operand_tokens(source: &Operand, addr: u64) -> Vec<InstructionTextTo
         }
         // TODO: is this correct? can you know what this is without knowing what PC is?
         Operand::Symbolic(i) => vec![InstructionTextToken::new(
-            InstructionTextTokenContents::PossibleAddress((addr as i16 + i) as u64),
+            InstructionTextTokenContents::CodeRelativeAddress((addr as i16 + i) as u64),
             format!("{:#x}", addr as i16 + i),
         )],
         Operand::Immediate(i) => {
-            // TODO: is this right? Do we need to sign extend the i16 to u64?
-            vec![
-                InstructionTextToken::new(InstructionTextTokenContents::Text, "#"),
-                InstructionTextToken::new(
+            if call {
+                vec![InstructionTextToken::new(
+                    InstructionTextTokenContents::CodeRelativeAddress(*i as u64),
+                    format!("{:#x}", i),
+                )]
+            } else {
+                vec![InstructionTextToken::new(
                     InstructionTextTokenContents::PossibleAddress(*i as u64),
                     format!("{:#x}", i),
-                ),
-            ]
+                )]
+            }
         }
-        Operand::Absolute(a) => vec![
-            InstructionTextToken::new(InstructionTextTokenContents::Text, "&"),
-            InstructionTextToken::new(
-                InstructionTextTokenContents::PossibleAddress(*a as u64),
-                format!("{:#x}", a),
-            ),
-        ],
+        Operand::Absolute(a) => {
+            if call {
+                vec![InstructionTextToken::new(
+                    InstructionTextTokenContents::CodeRelativeAddress(*a as u64),
+                    format!("{:#x}", a),
+                )]
+            } else {
+                vec![InstructionTextToken::new(
+                    InstructionTextTokenContents::PossibleAddress(*a as u64),
+                    format!("{:#x}", a),
+                )]
+            }
+        }
         Operand::Constant(i) => {
             let num_text = if *i >= 0 {
                 format!("{:#x}", i)
