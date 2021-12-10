@@ -820,10 +820,18 @@ macro_rules! conditional_jump {
 
 fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
     match inst {
-        Instruction::Rrc(_) => {}
-        Instruction::Swpb(_) => {}
-        Instruction::Rra(_) => {}
-        Instruction::Sxt(_) => {}
+        Instruction::Rrc(_) => {
+            il.unimplemented().append();
+        }
+        Instruction::Swpb(_) => {
+            il.unimplemented().append();
+        }
+        Instruction::Rra(_) => {
+            il.unimplemented().append();
+        }
+        Instruction::Sxt(_) => {
+            il.unimplemented().append();
+        }
         Instruction::Push(inst) => {
             let src = lift_source_operand(inst.source(), addr, il);
             il.push(2, src).append();
@@ -899,8 +907,12 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
             two_operand!(inst, il, op);
             auto_increment!(inst.source(), il);
         }
-        Instruction::Addc(inst) => {}
-        Instruction::Subc(inst) => {}
+        Instruction::Addc(inst) => {
+            il.unimplemented().append();
+        }
+        Instruction::Subc(inst) => {
+            il.unimplemented().append();
+        }
         Instruction::Sub(inst) => {
             let src = lift_source_operand(inst.source(), addr, il);
             let dest = lift_source_operand(inst.destination(), addr, il);
@@ -917,7 +929,9 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
                 .append();
             auto_increment!(inst.source(), il);
         }
-        Instruction::Dadd(inst) => {}
+        Instruction::Dadd(inst) => {
+            il.unimplemented().append();
+        }
         Instruction::Bit(inst) => {
             let src = lift_source_operand(inst.source(), addr, il);
             let dest = lift_source_operand(inst.destination(), addr, il);
@@ -955,8 +969,12 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
         }
 
         // emulated
-        Instruction::Adc(_) => {}
-        Instruction::Br(_) => {}
+        Instruction::Adc(_) => {
+            il.unimplemented().append();
+        }
+        Instruction::Br(_) => {
+            il.unimplemented().append();
+        }
         Instruction::Clr(inst) => {
             let op = il.const_int(2, 0);
             emulated!(inst, il, op);
@@ -970,7 +988,9 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
         Instruction::Clrz(_) => {
             il.set_flag(Flag::Z, il.const_int(0, 1)).append();
         }
-        Instruction::Dadc(_) => {}
+        Instruction::Dadc(_) => {
+           il.unimplemented().append();
+        }
         Instruction::Dec(inst) => {
             let dest = lift_source_operand(&inst.destination().unwrap(), addr, il);
             let op = il
@@ -985,8 +1005,12 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
                 .with_flag_write(FlagWrite::All);
             emulated!(inst, il, op);
         }
-        Instruction::Dint(_) => {}
-        Instruction::Eint(_) => {}
+        Instruction::Dint(_) => {
+           il.unimplemented().append();
+        }
+        Instruction::Eint(_) => {
+            il.unimplemented().append();
+        }
         Instruction::Inc(inst) => {
             let dest = lift_source_operand(&inst.destination().unwrap(), addr, il);
             let op = il
@@ -1001,7 +1025,9 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
                 .with_flag_write(FlagWrite::All);
             emulated!(inst, il, op);
         }
-        Instruction::Inv(_) => {}
+        Instruction::Inv(_) => {
+            il.unimplemented().append();
+        }
         Instruction::Nop(_) => {
             il.nop().append();
         }
@@ -1016,9 +1042,15 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
         Instruction::Ret(_) => {
             il.ret(il.pop(2)).append();
         }
-        Instruction::Rla(_) => {}
-        Instruction::Rlc(_) => {}
-        Instruction::Sbc(_) => {}
+        Instruction::Rla(_) => {
+            il.unimplemented().append();
+        }
+        Instruction::Rlc(_) => {
+            il.unimplemented().append();
+        }
+        Instruction::Sbc(_) => {
+            il.unimplemented().append();
+        }
         Instruction::Setc(_) => {
             il.set_flag(Flag::C, il.const_int(0, 1)).append();
         }
