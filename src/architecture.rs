@@ -789,31 +789,29 @@ macro_rules! emulated {
 
 macro_rules! conditional_jump {
     ($addr:ident, $inst:ident, $cond:ident, $il:ident) => {
-        let true_addr = ($addr as i64 + $inst.offset() as i64) as u64;
+        let true_addr = offset_to_absolute($addr, $inst.offset());
         let false_addr = $addr + $inst.size() as u64;
-        let mut new_true = None;
-        let mut new_false = None;
+        let mut new_true = Label::new();
+        let mut new_false = Label::new();
 
-        let true_label = $il.label_for_address(true_addr).unwrap_or_else(|| {
-            new_true = Some(Label::new());
-            new_true.as_ref().unwrap()
-        });
+        let true_label = $il.label_for_address(true_addr);
+        let false_label = $il.label_for_address(false_addr);
 
-        let false_label = $il.label_for_address(false_addr).unwrap_or_else(|| {
-            new_false = Some(Label::new());
-            new_false.as_ref().unwrap()
-        });
+        $il.if_expr(
+            $cond,
+            true_label.unwrap_or_else(|| &new_true),
+            false_label.unwrap_or_else(|| &new_false),
+        )
+        .append();
 
-        $il.if_expr($cond, true_label, false_label).append();
-
-        if new_true.is_some() {
-            $il.mark_label(&mut new_true.unwrap());
-            $il.jump($il.const_ptr(true_addr)).append();
+        if true_label.is_none() {
+            $il.mark_label(&mut new_true);
         }
 
-        if new_false.is_some() {
-            $il.mark_label(&mut new_false.unwrap());
-            $il.jump($il.const_ptr(false_addr)).append();
+        $il.goto(true_label.unwrap_or_else(|| &new_true)).append();
+
+        if false_label.is_none() {
+            $il.mark_label(&mut new_false);
         }
     };
 }
@@ -881,8 +879,7 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
             conditional_jump!(addr, inst, cond, il);
         }
         Instruction::Jmp(inst) => {
-            let offset = inst.offset();
-            let fixed_addr = (addr as i64 + offset as i64) as u64;
+            let fixed_addr = offset_to_absolute(addr, inst.offset());
             let label = il.label_for_address(fixed_addr);
             match label {
                 Some(label) => {
@@ -989,7 +986,7 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
             il.set_flag(Flag::Z, il.const_int(0, 1)).append();
         }
         Instruction::Dadc(_) => {
-           il.unimplemented().append();
+            il.unimplemented().append();
         }
         Instruction::Dec(inst) => {
             let dest = lift_source_operand(&inst.destination().unwrap(), addr, il);
@@ -1006,7 +1003,7 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
             emulated!(inst, il, op);
         }
         Instruction::Dint(_) => {
-           il.unimplemented().append();
+            il.unimplemented().append();
         }
         Instruction::Eint(_) => {
             il.unimplemented().append();
