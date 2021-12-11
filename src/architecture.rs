@@ -842,8 +842,15 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
         Instruction::Rra(_) => {
             il.unimplemented().append();
         }
-        Instruction::Sxt(_) => {
-            il.unimplemented().append();
+        Instruction::Sxt(inst) => {
+            // TODO: is this correct? Should src be 2 bytes if we're extending to 2?
+            let size = match inst.operand_width() {
+                Some(width) => width_to_size(width),
+                None => 2,
+            };
+            let src = lift_source_operand(inst.source(), size, il);
+            il.sx(2, src).append();
+            auto_increment!(inst.source(), il);
         }
         Instruction::Push(inst) => {
             let size = match inst.operand_width() {
