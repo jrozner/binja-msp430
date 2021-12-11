@@ -733,25 +733,30 @@ macro_rules! auto_increment {
 
 macro_rules! two_operand {
     ($inst:ident, $il:ident, $op:ident) => {
+        let size = width_to_size($inst.operand_width());
         match $inst.destination() {
             Operand::RegisterDirect(r) => $il
-                .set_reg(2, Register::try_from(*r as u32).unwrap(), $op)
+                .set_reg(size, Register::try_from(*r as u32).unwrap(), $op)
                 .append(),
             Operand::Indexed((r, offset)) => $il
                 .store(
-                    2,
+                    size,
                     $il.add(
-                        2,
-                        $il.reg(2, Register::try_from(*r as u32).unwrap()),
-                        $il.const_int(2, *offset as u64),
+                        size,
+                        $il.reg(size, Register::try_from(*r as u32).unwrap()),
+                        $il.const_int(size, *offset as u64),
                     ),
                     $op,
                 )
                 .append(),
             Operand::Symbolic(offset) => $il
-                .store(2, $il.add(2, $il.reg(2, Register::Pc), *offset as u64), $op)
+                .store(
+                    size,
+                    $il.add(size, $il.reg(size, Register::Pc), *offset as u64),
+                    $op,
+                )
                 .append(),
-            Operand::Absolute(val) => $il.store(2, $il.const_ptr(*val as u64), $op).append(),
+            Operand::Absolute(val) => $il.store(size, $il.const_ptr(*val as u64), $op).append(),
             _ => {
                 unreachable!()
             }
@@ -761,25 +766,35 @@ macro_rules! two_operand {
 
 macro_rules! emulated {
     ($inst:ident, $il:ident, $op:ident) => {
+        let size = match $inst.operand_width() {
+            Some(width) => width_to_size(width),
+            None => 2,
+        };
         match $inst.destination() {
             Some(Operand::RegisterDirect(r)) => $il
-                .set_reg(2, Register::try_from(*r as u32).unwrap(), $op)
+                .set_reg(size, Register::try_from(*r as u32).unwrap(), $op)
                 .append(),
             Some(Operand::Indexed((r, offset))) => $il
                 .store(
-                    2,
+                    size,
                     $il.add(
-                        2,
-                        $il.reg(2, Register::try_from(*r as u32).unwrap()),
-                        $il.const_int(2, *offset as u64),
+                        size,
+                        $il.reg(size, Register::try_from(*r as u32).unwrap()),
+                        $il.const_int(size, *offset as u64),
                     ),
                     $op,
                 )
                 .append(),
             Some(Operand::Symbolic(offset)) => $il
-                .store(2, $il.add(2, $il.reg(2, Register::Pc), *offset as u64), $op)
+                .store(
+                    size,
+                    $il.add(size, $il.reg(size, Register::Pc), *offset as u64),
+                    $op,
+                )
                 .append(),
-            Some(Operand::Absolute(val)) => $il.store(2, $il.const_ptr(*val as u64), $op).append(),
+            Some(Operand::Absolute(val)) => {
+                $il.store(size, $il.const_ptr(*val as u64), $op).append()
+            }
             _ => {
                 unreachable!()
             }
@@ -831,14 +846,22 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
             il.unimplemented().append();
         }
         Instruction::Push(inst) => {
-            let src = lift_source_operand(inst.source(), addr, il);
+            let size = match inst.operand_width() {
+                Some(width) => width_to_size(width),
+                None => 2,
+            };
+            let src = lift_source_operand(inst.source(), size, il);
             il.push(2, src).append();
             auto_increment!(inst.source(), il);
         }
         Instruction::Call(inst) => {
             // TODO: if immediate mode need to make argument CONST_PTR rather than CONST_INT
             // TODO: verify the special autoincrement behavior Josh implemented?
-            let src = lift_source_operand(inst.source(), addr, il);
+            let size = match inst.operand_width() {
+                Some(width) => width_to_size(width),
+                None => 2,
+            };
+            let src = lift_source_operand(inst.source(), size, il);
             il.call(src).append();
             auto_increment!(inst.source(), il);
         }
@@ -893,14 +916,16 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
 
         // two operand instructions
         Instruction::Mov(inst) => {
-            let src = lift_source_operand(inst.source(), addr, il);
+            let size = width_to_size(inst.operand_width());
+            let src = lift_source_operand(inst.source(), size, il);
             two_operand!(inst, il, src);
             auto_increment!(inst.source(), il);
         }
         Instruction::Add(inst) => {
-            let src = lift_source_operand(inst.source(), addr, il);
-            let dest = lift_source_operand(inst.destination(), addr, il);
-            let op = il.add(2, src, dest).with_flag_write(FlagWrite::All);
+            let size = width_to_size(inst.operand_width());
+            let src = lift_source_operand(inst.source(), size, il);
+            let dest = lift_source_operand(inst.destination(), size, il);
+            let op = il.add(size, src, dest).with_flag_write(FlagWrite::All);
             two_operand!(inst, il, op);
             auto_increment!(inst.source(), il);
         }
@@ -911,17 +936,19 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
             il.unimplemented().append();
         }
         Instruction::Sub(inst) => {
-            let src = lift_source_operand(inst.source(), addr, il);
-            let dest = lift_source_operand(inst.destination(), addr, il);
-            let op = il.sub(2, src, dest).with_flag_write(FlagWrite::All);
+            let size = width_to_size(inst.operand_width());
+            let src = lift_source_operand(inst.source(), size, il);
+            let dest = lift_source_operand(inst.destination(), size, il);
+            let op = il.sub(size, src, dest).with_flag_write(FlagWrite::All);
             two_operand!(inst, il, op);
             auto_increment!(inst.source(), il);
         }
         Instruction::Cmp(inst) => {
-            let src = lift_source_operand(inst.source(), addr, il);
-            let dest = lift_source_operand(inst.destination(), addr, il);
+            let size = width_to_size(inst.operand_width());
+            let src = lift_source_operand(inst.source(), size, il);
+            let dest = lift_source_operand(inst.destination(), size, il);
             let op = il
-                .sub(2, dest, src)
+                .sub(size, dest, src)
                 .with_flag_write(FlagWrite::All)
                 .append();
             auto_increment!(inst.source(), il);
@@ -930,37 +957,42 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
             il.unimplemented().append();
         }
         Instruction::Bit(inst) => {
-            let src = lift_source_operand(inst.source(), addr, il);
-            let dest = lift_source_operand(inst.destination(), addr, il);
-            let op = il.and(2, src, dest);
+            let size = width_to_size(inst.operand_width());
+            let src = lift_source_operand(inst.source(), size, il);
+            let dest = lift_source_operand(inst.destination(), size, il);
+            let op = il.and(size, src, dest);
             two_operand!(inst, il, op);
             auto_increment!(inst.source(), il);
         }
         Instruction::Bic(inst) => {
-            let src = lift_source_operand(inst.source(), addr, il);
-            let dest = lift_source_operand(inst.destination(), addr, il);
-            let op = il.and(2, il.not(2, src), dest);
+            let size = width_to_size(inst.operand_width());
+            let src = lift_source_operand(inst.source(), size, il);
+            let dest = lift_source_operand(inst.destination(), size, il);
+            let op = il.and(size, il.not(size, src), dest);
             two_operand!(inst, il, op);
             auto_increment!(inst.source(), il);
         }
         Instruction::Bis(inst) => {
-            let src = lift_source_operand(inst.source(), addr, il);
-            let dest = lift_source_operand(inst.destination(), addr, il);
-            let op = il.or(2, src, dest);
+            let size = width_to_size(inst.operand_width());
+            let src = lift_source_operand(inst.source(), size, il);
+            let dest = lift_source_operand(inst.destination(), size, il);
+            let op = il.or(size, src, dest);
             two_operand!(inst, il, op);
             auto_increment!(inst.source(), il);
         }
         Instruction::Xor(inst) => {
-            let src = lift_source_operand(inst.source(), addr, il);
-            let dest = lift_source_operand(inst.destination(), addr, il);
-            let op = il.xor(2, src, dest);
+            let size = width_to_size(inst.operand_width());
+            let src = lift_source_operand(inst.source(), size, il);
+            let dest = lift_source_operand(inst.destination(), size, il);
+            let op = il.xor(size, src, dest);
             two_operand!(inst, il, op);
             auto_increment!(inst.source(), il);
         }
         Instruction::And(inst) => {
-            let src = lift_source_operand(inst.source(), addr, il);
-            let dest = lift_source_operand(inst.destination(), addr, il);
-            let op = il.and(2, src, dest);
+            let size = width_to_size(inst.operand_width());
+            let src = lift_source_operand(inst.source(), size, il);
+            let dest = lift_source_operand(inst.destination(), size, il);
+            let op = il.and(size, src, dest);
             two_operand!(inst, il, op);
             auto_increment!(inst.source(), il);
         }
@@ -989,16 +1021,24 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
             il.unimplemented().append();
         }
         Instruction::Dec(inst) => {
-            let dest = lift_source_operand(&inst.destination().unwrap(), addr, il);
+            let size = match inst.operand_width() {
+                Some(width) => width_to_size(width),
+                None => 2,
+            };
+            let dest = lift_source_operand(&inst.destination().unwrap(), size, il);
             let op = il
-                .sub(2, dest, il.const_int(2, 1))
+                .sub(size, dest, il.const_int(size, 1))
                 .with_flag_write(FlagWrite::All);
             emulated!(inst, il, op);
         }
         Instruction::Decd(inst) => {
-            let dest = lift_source_operand(&inst.destination().unwrap(), addr, il);
+            let size = match inst.operand_width() {
+                Some(width) => width_to_size(width),
+                None => 2,
+            };
+            let dest = lift_source_operand(&inst.destination().unwrap(), size, il);
             let op = il
-                .sub(2, dest, il.const_int(2, 2))
+                .sub(size, dest, il.const_int(size, 2))
                 .with_flag_write(FlagWrite::All);
             emulated!(inst, il, op);
         }
@@ -1011,24 +1051,34 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
             il.unimplemented().append();
         }
         Instruction::Inc(inst) => {
-            let dest = lift_source_operand(&inst.destination().unwrap(), addr, il);
+            let size = match inst.operand_width() {
+                Some(width) => width_to_size(width),
+                None => 2,
+            };
+            let dest = lift_source_operand(&inst.destination().unwrap(), size, il);
             let op = il
-                .add(2, dest, il.const_int(2, 1))
+                .add(size, dest, il.const_int(size, 1))
                 .with_flag_write(FlagWrite::All);
             emulated!(inst, il, op);
         }
         Instruction::Incd(inst) => {
-            let dest = lift_source_operand(&inst.destination().unwrap(), addr, il);
+            let size = match inst.operand_width() {
+                Some(width) => width_to_size(width),
+                None => 2,
+            };
+            let dest = lift_source_operand(&inst.destination().unwrap(), size, il);
             let op = il
-                .add(2, dest, il.const_int(2, 2))
+                .add(size, dest, il.const_int(size, 2))
                 .with_flag_write(FlagWrite::All);
             emulated!(inst, il, op);
         }
         Instruction::Inv(inst) => {
-            let dest = lift_source_operand(&inst.destination().unwrap(), addr, il);
-            let op = il
-                .not(2, dest)
-                .with_flag_write(FlagWrite::All);
+            let size = match inst.operand_width() {
+                Some(width) => width_to_size(width),
+                None => 2,
+            };
+            let dest = lift_source_operand(&inst.destination().unwrap(), size, il);
+            let op = il.not(size, dest).with_flag_write(FlagWrite::All);
             emulated!(inst, il, op);
         }
         Instruction::Nop(_) => {
@@ -1036,7 +1086,12 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
         }
         Instruction::Pop(inst) => {
             if let Some(Operand::RegisterDirect(r)) = inst.destination() {
-                il.set_reg(2, Register::try_from(*r as u32).unwrap(), il.pop(2))
+                // TODO: is this correct? Do we always pop 2 bytes off and just move the lower in if it's B?
+                let size = match inst.operand_width() {
+                    Some(width) => width_to_size(width),
+                    None => 2,
+                };
+                il.set_reg(size, Register::try_from(*r as u32).unwrap(), il.pop(2))
                     .append();
             } else {
                 info!("pop: invalid destination operand");
@@ -1064,8 +1119,12 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
             il.set_flag(Flag::Z, il.const_int(0, 1)).append();
         }
         Instruction::Tst(inst) => {
-            let dest = lift_source_operand(&inst.destination().unwrap(), addr, il);
-            il.sub(2, dest, il.const_int(2, 0))
+            let size = match inst.operand_width() {
+                Some(width) => width_to_size(width),
+                None => 2,
+            };
+            let dest = lift_source_operand(&inst.destination().unwrap(), size, il);
+            il.sub(size, dest, il.const_int(size, 0))
                 .with_flag_write(FlagWrite::All)
                 .append();
         }
@@ -1074,7 +1133,7 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
 
 fn lift_source_operand<'a>(
     operand: &Operand,
-    addr: u64,
+    size: usize,
     il: &'a Lifter<Msp430>,
 ) -> binaryninja::llil::Expression<
     'a,
@@ -1084,31 +1143,35 @@ fn lift_source_operand<'a>(
     binaryninja::llil::ValueExpr,
 > {
     match operand {
-        Operand::RegisterDirect(r) => il.reg(2, Register::try_from(*r as u32).unwrap()),
+        Operand::RegisterDirect(r) => il.reg(size, Register::try_from(*r as u32).unwrap()),
         Operand::Indexed((r, offset)) => il
             .load(
-                2,
+                size,
                 il.add(
-                    2,
-                    il.reg(2, Register::try_from(*r as u32).unwrap()),
-                    il.const_int(2, *offset as u64),
+                    size,
+                    il.reg(size, Register::try_from(*r as u32).unwrap()),
+                    il.const_int(size, *offset as u64),
                 ),
             )
             .into_expr(),
         // should we add offset to addr here rather than lifting to the register since we know where PC is?
         Operand::Symbolic(offset) => il
             .load(
-                2,
-                il.add(2, il.reg(2, Register::Pc), il.const_int(2, *offset as u64)),
+                size,
+                il.add(
+                    size,
+                    il.reg(size, Register::Pc),
+                    il.const_int(size, *offset as u64),
+                ),
             )
             .into_expr(),
-        Operand::Absolute(addr) => il.load(2, il.const_ptr(*addr as u64)).into_expr(),
+        Operand::Absolute(addr) => il.load(size, il.const_ptr(*addr as u64)).into_expr(),
         // these are the same, we need to autoincrement in a separate il instruction
         Operand::RegisterIndirect(r) | Operand::RegisterIndirectAutoIncrement(r) => il
-            .load(2, il.reg(2, Register::try_from(*r as u32).unwrap()))
+            .load(size, il.reg(size, Register::try_from(*r as u32).unwrap()))
             .into_expr(),
-        Operand::Immediate(val) => il.const_int(2, *val as u64),
-        Operand::Constant(val) => il.const_int(2, *val as u64),
+        Operand::Immediate(val) => il.const_int(size, *val as u64),
+        Operand::Constant(val) => il.const_int(size, *val as u64),
     }
 }
 
