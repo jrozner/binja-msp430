@@ -1022,8 +1022,12 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
                 .with_flag_write(FlagWrite::All);
             emulated!(inst, il, op);
         }
-        Instruction::Inv(_) => {
-            il.unimplemented().append();
+        Instruction::Inv(inst) => {
+            let dest = lift_source_operand(&inst.destination().unwrap(), addr, il);
+            let op = il
+                .not(2, dest)
+                .with_flag_write(FlagWrite::All);
+            emulated!(inst, il, op);
         }
         Instruction::Nop(_) => {
             il.nop().append();
