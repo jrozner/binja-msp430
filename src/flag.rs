@@ -4,6 +4,7 @@ use binaryninja::architecture::FlagRole;
 use std::borrow::Cow;
 use std::collections::HashMap;
 
+// NOTE: GIE, CPUOFF, OSCOFF, SG0, and SG1 not implemented as it's not clear how they would be used
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Flag {
     C,
