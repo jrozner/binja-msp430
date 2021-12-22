@@ -155,16 +155,54 @@ impl Architecture for Msp430 {
                         );
                     }
                     Instruction::Br(inst) => match inst.destination() {
-                        // TODO: br supports other addressing modes, need to add support for them here
+                        Some(Operand::RegisterDirect(_)) => {
+                            info.add_branch(BranchInfo::Indirect, Some(self.handle))
+                        }
+                        Some(Operand::Indexed(_)) => {
+                            info.add_branch(BranchInfo::Indirect, Some(self.handle))
+                        }
+                        Some(Operand::Absolute(value)) => info.add_branch(
+                            BranchInfo::Unconditional(*value as u64),
+                            Some(self.handle),
+                        ),
+                        Some(Operand::Symbolic(offset)) => info.add_branch(
+                            BranchInfo::Unconditional((addr as i64 + *offset as i64) as u64),
+                            Some(self.handle),
+                        ),
                         Some(Operand::Immediate(addr)) => info
                             .add_branch(BranchInfo::Unconditional(*addr as u64), Some(self.handle)),
-                        _ => {}
+                        Some(Operand::Constant(_)) => info
+                            .add_branch(BranchInfo::Unconditional(addr as u64), Some(self.handle)),
+                        Some(Operand::RegisterIndirect(_))
+                        | Some(Operand::RegisterIndirectAutoIncrement(_)) => {
+                            info.add_branch(BranchInfo::Indirect, Some(self.handle))
+                        }
+                        None => {}
                     },
                     Instruction::Call(inst) => match inst.source() {
-                        Operand::Immediate(addr) => {
-                            info.add_branch(BranchInfo::Call(*addr as u64), Some(self.handle));
+                        Operand::RegisterDirect(_) => {
+                            info.add_branch(BranchInfo::Indirect, Some(self.handle))
                         }
-                        _ => {}
+                        Operand::Indexed(_) => {
+                            info.add_branch(BranchInfo::Indirect, Some(self.handle))
+                        }
+                        Operand::Absolute(value) => {
+                            info.add_branch(BranchInfo::Call(*value as u64), Some(self.handle))
+                        }
+                        Operand::Symbolic(offset) => info.add_branch(
+                            BranchInfo::Call((addr as i64 + *offset as i64) as u64),
+                            Some(self.handle),
+                        ),
+                        Operand::Immediate(addr) => {
+                            info.add_branch(BranchInfo::Call(*addr as u64), Some(self.handle))
+                        }
+                        Operand::Constant(_) => {
+                            info.add_branch(BranchInfo::Call(addr as u64), Some(self.handle))
+                        }
+                        Operand::RegisterIndirect(_)
+                        | Operand::RegisterIndirectAutoIncrement(_) => {
+                            info.add_branch(BranchInfo::Indirect, Some(self.handle))
+                        }
                     },
                     Instruction::Reti(_) => {
                         info.add_branch(BranchInfo::FunctionReturn, Some(self.handle));
@@ -758,16 +796,6 @@ macro_rules! one_operand {
             Operand::RegisterIndirectAutoIncrement(r) => {
                 // TODO
                 unimplemented!();
-                $il.set_reg(
-                    2,
-                    Register::try_from(*r as u32).unwrap(),
-                    $il.add(
-                        2,
-                        $il.reg(2, Register::try_from(*r as u32).unwrap()),
-                        $il.const_int(2, 2),
-                    ),
-                )
-                .append();
             }
             _ => {
                 unreachable!()
