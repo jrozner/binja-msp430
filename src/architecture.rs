@@ -155,6 +155,7 @@ impl Architecture for Msp430 {
                         );
                     }
                     Instruction::Br(inst) => match inst.destination() {
+                        // TODO: br supports other addressing modes, need to add support for them here
                         Some(Operand::Immediate(addr)) => info
                             .add_branch(BranchInfo::Unconditional(*addr as u64), Some(self.handle)),
                         _ => {}
@@ -884,6 +885,8 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
                 None => 2,
             };
             let src = lift_source_operand(inst.source(), size, il);
+            // always push 2 bytes, even with push.b. Push.b will only push the low byte setting
+            // high byte to 0
             il.push(2, src).append();
             auto_increment!(inst.source(), il);
         }
@@ -1042,12 +1045,15 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
             emulated!(inst, il, op);
         }
         Instruction::Clrc(_) => {
+            // TODO: should we lift clearing the C bit in the SR register as well?
             il.set_flag(Flag::C, il.const_int(0, 1)).append();
         }
         Instruction::Clrn(_) => {
+            // TODO: should we lift clearing the N bit in the SR register as well?
             il.set_flag(Flag::N, il.const_int(0, 1)).append();
         }
         Instruction::Clrz(_) => {
+            // TODO: should we lift clearing the Z bit in the SR register as well?
             il.set_flag(Flag::Z, il.const_int(0, 1)).append();
         }
         Instruction::Dadc(_) => {
@@ -1119,7 +1125,7 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
         }
         Instruction::Pop(inst) => {
             if let Some(Operand::RegisterDirect(r)) = inst.destination() {
-                // TODO: is this correct? Do we always pop 2 bytes off and just move the lower in if it's B?
+                // TODO: We do always pop off 2 bytes, even with using pop.b, but the top byte should be zeroed out (confirmed in debugger)
                 let size = match inst.operand_width() {
                     Some(width) => width_to_size(width),
                     None => 2,
@@ -1143,12 +1149,15 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
             il.unimplemented().append();
         }
         Instruction::Setc(_) => {
+            // TODO: should we lift setting the C bit in the SR register as well?
             il.set_flag(Flag::C, il.const_int(0, 1)).append();
         }
         Instruction::Setn(_) => {
+            // TODO: should we lift setting the N bit in the SR register as well?
             il.set_flag(Flag::N, il.const_int(0, 1)).append();
         }
         Instruction::Setz(_) => {
+            // TODO: should we lift setting the Z bit in the SR register as well?
             il.set_flag(Flag::Z, il.const_int(0, 1)).append();
         }
         Instruction::Tst(inst) => {
