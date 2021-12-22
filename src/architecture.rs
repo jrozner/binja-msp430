@@ -220,8 +220,8 @@ impl Architecture for Msp430 {
         class: Option<Self::FlagClass>,
     ) -> Vec<Self::Flag> {
         match condition {
-            FlagCondition::LLFC_UGE => vec![Flag::C],
-            FlagCondition::LLFC_ULT => vec![Flag::C],
+            FlagCondition::LLFC_ULE => vec![Flag::C],
+            FlagCondition::LLFC_UGT => vec![Flag::C],
             FlagCondition::LLFC_SGE => vec![Flag::N, Flag::V],
             FlagCondition::LLFC_SLT => vec![Flag::N, Flag::V],
             FlagCondition::LLFC_E => vec![Flag::Z],
@@ -949,11 +949,11 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
             conditional_jump!(addr, inst, cond, il);
         }
         Instruction::Jlo(inst) => {
-            let cond = il.flag_cond(FlagCondition::LLFC_ULT);
+            let cond = il.flag_cond(FlagCondition::LLFC_UGT);
             conditional_jump!(addr, inst, cond, il);
         }
         Instruction::Jc(inst) => {
-            let cond = il.flag_cond(FlagCondition::LLFC_UGE);
+            let cond = il.flag_cond(FlagCondition::LLFC_ULE);
             conditional_jump!(addr, inst, cond, il);
         }
         Instruction::Jn(inst) => {
