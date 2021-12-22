@@ -1069,8 +1069,10 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
         Instruction::Adc(_) => {
             il.unimplemented().append();
         }
-        Instruction::Br(_) => {
-            il.unimplemented().append();
+        Instruction::Br(inst) => {
+            // TODO: this has the same problem as call using CONST_INT rather than CONST_PTR for dest. Also not sure if this is lifted correctly or whether we want to add label logic where applicable (for immediate)
+            let dest = lift_source_operand(&inst.destination().unwrap(), 2, il);
+            il.jump(dest).append();
         }
         Instruction::Clr(inst) => {
             let op = il.const_int(2, 0);
