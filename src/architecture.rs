@@ -863,14 +863,44 @@ macro_rules! conditional_jump {
 
 fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
     match inst {
-        Instruction::Rrc(_) => {
-            il.unimplemented().append();
+        Instruction::Rrc(inst) => {
+            let size = match inst.operand_width() {
+                Some(width) => width_to_size(width),
+                None => 2,
+            };
+            let src = il.const_int(size, 1);
+            let dest = lift_source_operand(inst.source(), size, il);
+            let op = match inst.operand_width() {
+                Some(OperandWidth::Byte) => {
+                    il.sx(2, il.rrc(size, dest, src).with_flag_write(FlagWrite::All))
+                }
+                Some(OperandWidth::Word) | None => {
+                    il.rrc(size, dest, src).with_flag_write(FlagWrite::All)
+                }
+            };
+            one_operand!(inst.source(), il, op);
+            auto_increment!(inst.source(), il);
         }
         Instruction::Swpb(_) => {
             il.unimplemented().append();
         }
-        Instruction::Rra(_) => {
-            il.unimplemented().append();
+        Instruction::Rra(inst) => {
+            let size = match inst.operand_width() {
+                Some(width) => width_to_size(width),
+                None => 2,
+            };
+            let src = il.const_int(size, 1);
+            let dest = lift_source_operand(inst.source(), size, il);
+            let op = match inst.operand_width() {
+                Some(OperandWidth::Byte) => {
+                    il.sx(2, il.ror(size, dest, src).with_flag_write(FlagWrite::All))
+                }
+                Some(OperandWidth::Word) | None => {
+                    il.ror(size, dest, src).with_flag_write(FlagWrite::All)
+                }
+            };
+            one_operand!(inst.source(), il, op);
+            auto_increment!(inst.source(), il);
         }
         Instruction::Sxt(inst) => {
             // source is always 1 byte and instruction is always 2 bytes for sxt because we're sign
@@ -1208,11 +1238,39 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
         Instruction::Ret(_) => {
             il.ret(il.pop(2)).append();
         }
-        Instruction::Rla(_) => {
-            il.unimplemented().append();
+        Instruction::Rla(inst) => {
+            let size = match inst.operand_width() {
+                Some(width) => width_to_size(width),
+                None => 2,
+            };
+            let src = il.const_int(size, 1);
+            let dest = lift_source_operand(&inst.destination().unwrap(), size, il);
+            let op = match inst.operand_width() {
+                Some(OperandWidth::Byte) => {
+                    il.sx(2, il.rol(size, dest, src).with_flag_write(FlagWrite::All))
+                }
+                Some(OperandWidth::Word) | None => {
+                    il.rol(size, dest, src).with_flag_write(FlagWrite::All)
+                }
+            };
+            emulated!(inst, il, op);
         }
-        Instruction::Rlc(_) => {
-            il.unimplemented().append();
+        Instruction::Rlc(inst) => {
+            let size = match inst.operand_width() {
+                Some(width) => width_to_size(width),
+                None => 2,
+            };
+            let src = il.const_int(size, 1);
+            let dest = lift_source_operand(&inst.destination().unwrap(), size, il);
+            let op = match inst.operand_width() {
+                Some(OperandWidth::Byte) => {
+                    il.sx(2, il.rlc(size, dest, src).with_flag_write(FlagWrite::All))
+                }
+                Some(OperandWidth::Word) | None => {
+                    il.rlc(size, dest, src).with_flag_write(FlagWrite::All)
+                }
+            };
+            emulated!(inst, il, op);
         }
         Instruction::Sbc(_) => {
             il.unimplemented().append();
