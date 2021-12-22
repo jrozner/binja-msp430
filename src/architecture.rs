@@ -731,6 +731,34 @@ macro_rules! auto_increment {
     };
 }
 
+macro_rules! one_operand {
+    ($source:expr, $il:ident, $op:ident) => {
+        match $source {
+            Operand::RegisterDirect(r) => $il
+                .set_reg(2, Register::try_from(*r as u32).unwrap(), $op)
+                .append(),
+            Operand::Indexed((r, offset)) => $il
+                .store(
+                    2,
+                    $il.add(
+                        2,
+                        $il.reg(2, Register::try_from(*r as u32).unwrap()),
+                        $il.const_int(2, *offset as u64),
+                    ),
+                    $op,
+                )
+                .append(),
+            Operand::Symbolic(offset) => $il
+                .store(2, $il.add(2, $il.reg(2, Register::Pc), *offset as u64), $op)
+                .append(),
+            Operand::Absolute(val) => $il.store(2, $il.const_ptr(*val as u64), $op).append(),
+            _ => {
+                unreachable!()
+            }
+        };
+    };
+}
+
 macro_rules! two_operand {
     ($inst:ident, $il:ident, $op:ident) => {
         let size = width_to_size($inst.operand_width());
@@ -843,13 +871,11 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
             il.unimplemented().append();
         }
         Instruction::Sxt(inst) => {
-            // TODO: is this correct? Should src be 2 bytes if we're extending to 2?
-            let size = match inst.operand_width() {
-                Some(width) => width_to_size(width),
-                None => 2,
-            };
-            let src = lift_source_operand(inst.source(), size, il);
-            il.sx(2, src).append();
+            // source is always 1 byte and instruction is always 2 bytes for sxt because we're sign
+            // extending the low byte into the high and the result is always 2 bytes
+            let src = lift_source_operand(inst.source(), 1, il);
+            let op = il.sx(2, src).with_flag_write(FlagWrite::All);
+            one_operand!(inst.source(), il, op);
             auto_increment!(inst.source(), il);
         }
         Instruction::Push(inst) => {
