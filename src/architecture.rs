@@ -806,35 +806,25 @@ macro_rules! two_operand {
 
 macro_rules! emulated {
     ($inst:ident, $il:ident, $op:ident) => {
-        let size = match $inst.operand_width() {
-            Some(width) => width_to_size(width),
-            None => 2,
-        };
         match $inst.destination() {
             Some(Operand::RegisterDirect(r)) => $il
-                .set_reg(size, Register::try_from(*r as u32).unwrap(), $op)
+                .set_reg(2, Register::try_from(*r as u32).unwrap(), $op)
                 .append(),
             Some(Operand::Indexed((r, offset))) => $il
                 .store(
-                    size,
+                    2,
                     $il.add(
-                        size,
-                        $il.reg(size, Register::try_from(*r as u32).unwrap()),
-                        $il.const_int(size, *offset as u64),
+                        2,
+                        $il.reg(2, Register::try_from(*r as u32).unwrap()),
+                        $il.const_int(2, *offset as u64),
                     ),
                     $op,
                 )
                 .append(),
             Some(Operand::Symbolic(offset)) => $il
-                .store(
-                    size,
-                    $il.add(size, $il.reg(size, Register::Pc), *offset as u64),
-                    $op,
-                )
+                .store(2, $il.add(2, $il.reg(2, Register::Pc), *offset as u64), $op)
                 .append(),
-            Some(Operand::Absolute(val)) => {
-                $il.store(size, $il.const_ptr(*val as u64), $op).append()
-            }
+            Some(Operand::Absolute(val)) => $il.store(2, $il.const_ptr(*val as u64), $op).append(),
             _ => {
                 unreachable!()
             }
