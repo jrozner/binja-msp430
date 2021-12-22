@@ -977,7 +977,12 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
             let size = width_to_size(inst.operand_width());
             let src = lift_source_operand(inst.source(), size, il);
             let dest = lift_source_operand(inst.destination(), size, il);
-            let op = il.add(size, src, dest).with_flag_write(FlagWrite::All);
+            let op = match inst.operand_width() {
+                OperandWidth::Byte => {
+                    il.sx(2, il.add(size, src, dest).with_flag_write(FlagWrite::All))
+                }
+                OperandWidth::Word => il.add(size, src, dest).with_flag_write(FlagWrite::All),
+            };
             two_operand!(inst.destination(), il, op);
             auto_increment!(inst.source(), il);
         }
@@ -991,7 +996,12 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
             let size = width_to_size(inst.operand_width());
             let src = lift_source_operand(inst.source(), size, il);
             let dest = lift_source_operand(inst.destination(), size, il);
-            let op = il.sub(size, src, dest).with_flag_write(FlagWrite::All);
+            let op = match inst.operand_width() {
+                OperandWidth::Byte => {
+                    il.sx(2, il.sub(size, src, dest).with_flag_write(FlagWrite::All))
+                }
+                OperandWidth::Word => il.sub(size, src, dest).with_flag_write(FlagWrite::All),
+            };
             two_operand!(inst.destination(), il, op);
             auto_increment!(inst.source(), il);
         }
@@ -999,8 +1009,7 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
             let size = width_to_size(inst.operand_width());
             let src = lift_source_operand(inst.source(), size, il);
             let dest = lift_source_operand(inst.destination(), size, il);
-            let op = il
-                .sub(size, dest, src)
+            il.sub(size, dest, src)
                 .with_flag_write(FlagWrite::All)
                 .append();
             auto_increment!(inst.source(), il);
@@ -1012,15 +1021,19 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
             let size = width_to_size(inst.operand_width());
             let src = lift_source_operand(inst.source(), size, il);
             let dest = lift_source_operand(inst.destination(), size, il);
-            let op = il.and(size, src, dest);
-            two_operand!(inst.destination(), il, op);
+            il.and(size, src, dest)
+                .with_flag_write(FlagWrite::All)
+                .append();
             auto_increment!(inst.source(), il);
         }
         Instruction::Bic(inst) => {
             let size = width_to_size(inst.operand_width());
             let src = lift_source_operand(inst.source(), size, il);
             let dest = lift_source_operand(inst.destination(), size, il);
-            let op = il.and(size, il.not(size, src), dest);
+            let op = match inst.operand_width() {
+                OperandWidth::Byte => il.sx(2, il.and(size, il.not(size, src), dest)),
+                OperandWidth::Word => il.and(size, il.not(size, src), dest),
+            };
             two_operand!(inst.destination(), il, op);
             auto_increment!(inst.source(), il);
         }
@@ -1028,7 +1041,10 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
             let size = width_to_size(inst.operand_width());
             let src = lift_source_operand(inst.source(), size, il);
             let dest = lift_source_operand(inst.destination(), size, il);
-            let op = il.or(size, src, dest);
+            let op = match inst.operand_width() {
+                OperandWidth::Byte => il.sx(2, il.or(size, src, dest)),
+                OperandWidth::Word => il.or(size, src, dest),
+            };
             two_operand!(inst.destination(), il, op);
             auto_increment!(inst.source(), il);
         }
@@ -1036,7 +1052,12 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
             let size = width_to_size(inst.operand_width());
             let src = lift_source_operand(inst.source(), size, il);
             let dest = lift_source_operand(inst.destination(), size, il);
-            let op = il.xor(size, src, dest);
+            let op = match inst.operand_width() {
+                OperandWidth::Byte => {
+                    il.sx(2, il.xor(size, src, dest).with_flag_write(FlagWrite::All))
+                }
+                OperandWidth::Word => il.xor(size, src, dest).with_flag_write(FlagWrite::All),
+            };
             two_operand!(inst.destination(), il, op);
             auto_increment!(inst.source(), il);
         }
@@ -1045,8 +1066,10 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
             let src = lift_source_operand(inst.source(), size, il);
             let dest = lift_source_operand(inst.destination(), size, il);
             let op = match inst.operand_width() {
-                OperandWidth::Byte => il.sx(2, il.and(size, src, dest)),
-                OperandWidth::Word => il.and(size, src, dest),
+                OperandWidth::Byte => {
+                    il.sx(2, il.and(size, src, dest).with_flag_write(FlagWrite::All))
+                }
+                OperandWidth::Word => il.and(size, src, dest).with_flag_write(FlagWrite::All),
             };
             two_operand!(inst.destination(), il, op);
             auto_increment!(inst.source(), il);
@@ -1084,9 +1107,16 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
                 None => 2,
             };
             let dest = lift_source_operand(&inst.destination().unwrap(), size, il);
-            let op = il
-                .sub(size, dest, il.const_int(size, 1))
-                .with_flag_write(FlagWrite::All);
+            let op = match inst.operand_width() {
+                Some(OperandWidth::Byte) => il.sx(
+                    2,
+                    il.sub(size, dest, il.const_int(size, 1))
+                        .with_flag_write(FlagWrite::All),
+                ),
+                Some(OperandWidth::Word) | None => il
+                    .sub(size, dest, il.const_int(size, 1))
+                    .with_flag_write(FlagWrite::All),
+            };
             emulated!(inst, il, op);
         }
         Instruction::Decd(inst) => {
@@ -1095,9 +1125,16 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
                 None => 2,
             };
             let dest = lift_source_operand(&inst.destination().unwrap(), size, il);
-            let op = il
-                .sub(size, dest, il.const_int(size, 2))
-                .with_flag_write(FlagWrite::All);
+            let op = match inst.operand_width() {
+                Some(OperandWidth::Byte) => il.sx(
+                    2,
+                    il.sub(size, dest, il.const_int(size, 2))
+                        .with_flag_write(FlagWrite::All),
+                ),
+                Some(OperandWidth::Word) | None => il
+                    .sub(size, dest, il.const_int(size, 2))
+                    .with_flag_write(FlagWrite::All),
+            };
             emulated!(inst, il, op);
         }
         Instruction::Dint(_) => {
@@ -1114,9 +1151,16 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
                 None => 2,
             };
             let dest = lift_source_operand(&inst.destination().unwrap(), size, il);
-            let op = il
-                .add(size, dest, il.const_int(size, 1))
-                .with_flag_write(FlagWrite::All);
+            let op = match inst.operand_width() {
+                Some(OperandWidth::Byte) => il.sx(
+                    2,
+                    il.add(size, dest, il.const_int(size, 1))
+                        .with_flag_write(FlagWrite::All),
+                ),
+                Some(OperandWidth::Word) | None => il
+                    .add(size, dest, il.const_int(size, 1))
+                    .with_flag_write(FlagWrite::All),
+            };
             emulated!(inst, il, op);
         }
         Instruction::Incd(inst) => {
@@ -1125,9 +1169,16 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
                 None => 2,
             };
             let dest = lift_source_operand(&inst.destination().unwrap(), size, il);
-            let op = il
-                .add(size, dest, il.const_int(size, 2))
-                .with_flag_write(FlagWrite::All);
+            let op = match inst.operand_width() {
+                Some(OperandWidth::Byte) => il.sx(
+                    2,
+                    il.add(size, dest, il.const_int(size, 2))
+                        .with_flag_write(FlagWrite::All),
+                ),
+                Some(OperandWidth::Word) | None => il
+                    .add(size, dest, il.const_int(size, 2))
+                    .with_flag_write(FlagWrite::All),
+            };
             emulated!(inst, il, op);
         }
         Instruction::Inv(inst) => {
@@ -1136,7 +1187,14 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
                 None => 2,
             };
             let dest = lift_source_operand(&inst.destination().unwrap(), size, il);
-            let op = il.not(size, dest).with_flag_write(FlagWrite::All);
+            let op = match inst.operand_width() {
+                Some(OperandWidth::Byte) => {
+                    il.sx(2, il.not(size, dest).with_flag_write(FlagWrite::All))
+                }
+                Some(OperandWidth::Word) | None => {
+                    il.not(size, dest).with_flag_write(FlagWrite::All)
+                }
+            };
             emulated!(inst, il, op);
         }
         Instruction::Nop(_) => {
