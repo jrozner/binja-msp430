@@ -792,10 +792,22 @@ macro_rules! one_operand {
                 .append(),
             Operand::Absolute(val) => $il.store(2, $il.const_ptr(*val as u64), $op).append(),
             Operand::Immediate(_) => unimplemented!(), // TODO
-            Operand::RegisterIndirect(_) => unimplemented!(), // TODO
+            Operand::RegisterIndirect(r) => $il
+                .store(2, $il.reg(2, Register::try_from(*r as u32).unwrap()), $op)
+                .append(),
             Operand::RegisterIndirectAutoIncrement(r) => {
-                // TODO
-                unimplemented!();
+                $il.store(2, $il.reg(2, Register::try_from(*r as u32).unwrap()), $op)
+                    .append();
+                $il.set_reg(
+                    2,
+                    Register::try_from(*r as u32).unwrap(),
+                    $il.add(
+                        2,
+                        $il.reg(2, Register::try_from(*r as u32).unwrap()),
+                        $il.const_int(2, 2),
+                    ),
+                )
+                .append()
             }
             _ => {
                 unreachable!()
@@ -907,7 +919,6 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
                 }
             };
             one_operand!(inst.source(), il, op);
-            auto_increment!(inst.source(), il);
         }
         Instruction::Swpb(_) => {
             il.unimplemented().append();
@@ -928,7 +939,6 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
                 }
             };
             one_operand!(inst.source(), il, op);
-            auto_increment!(inst.source(), il);
         }
         Instruction::Sxt(inst) => {
             // source is always 1 byte and instruction is always 2 bytes for sxt because we're sign
@@ -936,7 +946,6 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
             let src = lift_source_operand(inst.source(), 1, il);
             let op = il.sx(2, src).with_flag_write(FlagWrite::All);
             one_operand!(inst.source(), il, op);
-            auto_increment!(inst.source(), il);
         }
         Instruction::Push(inst) => {
             let size = match inst.operand_width() {
