@@ -78,7 +78,7 @@ impl architecture::FlagGroup for FlagGroup {
     type FlagClass = FlagClass;
 
     fn name(&self) -> Cow<str> {
-        unimplemented!();
+        unimplemented!()
     }
 
     fn id(&self) -> u32 {
