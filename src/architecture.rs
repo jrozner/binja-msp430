@@ -68,7 +68,7 @@ impl Architecture for Msp430 {
         self.max_instr_len()
     }
 
-    fn associated_arch_by_addr(&self, addr: &mut u64) -> CoreArchitecture {
+    fn associated_arch_by_addr(&self, _addr: &mut u64) -> CoreArchitecture {
         self.handle
     }
 
@@ -227,7 +227,7 @@ impl Architecture for Msp430 {
         match msp430_asm::decode(data) {
             Ok(inst) => {
                 let tokens = generate_tokens(&inst, addr);
-                if tokens.len() < 1 {
+                if tokens.is_empty() {
                     None
                 } else {
                     Some((inst.size(), tokens))
@@ -411,7 +411,7 @@ fn generate_tokens(inst: &Instruction, addr: u64) -> Vec<InstructionTextToken> {
         Instruction::Call(inst) => generate_single_operand_tokens(inst, addr, false),
         Instruction::Reti(_) => vec![InstructionTextToken::new(
             InstructionTextTokenContents::Instruction,
-            format!("{}", "reti"),
+            "reti".to_string(),
         )],
 
         // Jxx instructions
@@ -473,13 +473,11 @@ fn generate_single_operand_tokens(
 ) -> Vec<InstructionTextToken> {
     let mut res = vec![InstructionTextToken::new(
         InstructionTextTokenContents::Instruction,
-        format!("{}", inst.mnemonic()),
+        inst.mnemonic().to_string(),
     )];
 
     if inst.mnemonic().len() < MIN_MNEMONIC {
-        let padding = std::iter::repeat(" ")
-            .take(MIN_MNEMONIC - inst.mnemonic().len())
-            .collect::<String>();
+        let padding = " ".repeat(MIN_MNEMONIC - inst.mnemonic().len());
         res.push(InstructionTextToken::new(
             InstructionTextTokenContents::Text,
             padding,
@@ -496,13 +494,11 @@ fn generate_jxx_tokens(inst: &impl Jxx, addr: u64) -> Vec<InstructionTextToken> 
 
     let mut res = vec![InstructionTextToken::new(
         InstructionTextTokenContents::Instruction,
-        format!("{}", inst.mnemonic()),
+        inst.mnemonic().to_string(),
     )];
 
     if inst.mnemonic().len() < MIN_MNEMONIC {
-        let padding = std::iter::repeat(" ")
-            .take(MIN_MNEMONIC - inst.mnemonic().len())
-            .collect::<String>();
+        let padding = " ".repeat(MIN_MNEMONIC - inst.mnemonic().len());
         res.push(InstructionTextToken::new(
             InstructionTextTokenContents::Text,
             padding,
@@ -520,13 +516,11 @@ fn generate_jxx_tokens(inst: &impl Jxx, addr: u64) -> Vec<InstructionTextToken> 
 fn generate_two_operand_tokens(inst: &impl TwoOperand, addr: u64) -> Vec<InstructionTextToken> {
     let mut res = vec![InstructionTextToken::new(
         InstructionTextTokenContents::Instruction,
-        format!("{}", inst.mnemonic()),
+        inst.mnemonic().to_string(),
     )];
 
     if inst.mnemonic().len() < MIN_MNEMONIC {
-        let padding = std::iter::repeat(" ")
-            .take(MIN_MNEMONIC - inst.mnemonic().len())
-            .collect::<String>();
+        let padding = " ".repeat(MIN_MNEMONIC - inst.mnemonic().len());
         res.push(InstructionTextToken::new(
             InstructionTextTokenContents::Text,
             padding,
@@ -546,13 +540,11 @@ fn generate_two_operand_tokens(inst: &impl TwoOperand, addr: u64) -> Vec<Instruc
 fn generate_emulated_tokens(inst: &impl Emulated, addr: u64) -> Vec<InstructionTextToken> {
     let mut res = vec![InstructionTextToken::new(
         InstructionTextTokenContents::Instruction,
-        format!("{}", inst.mnemonic()),
+        inst.mnemonic().to_string(),
     )];
 
     if inst.mnemonic().len() < MIN_MNEMONIC {
-        let padding = std::iter::repeat(" ")
-            .take(MIN_MNEMONIC - inst.mnemonic().len())
-            .collect::<String>();
+        let padding = " ".repeat(MIN_MNEMONIC - inst.mnemonic().len());
         res.push(InstructionTextToken::new(
             InstructionTextTokenContents::Text,
             padding,
@@ -1043,10 +1035,10 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
             two_operand!(inst.destination(), il, op);
             auto_increment!(inst.source(), il);
         }
-        Instruction::Addc(inst) => {
+        Instruction::Addc(_) => {
             il.unimplemented().append();
         }
-        Instruction::Subc(inst) => {
+        Instruction::Subc(_) => {
             il.unimplemented().append();
         }
         Instruction::Sub(inst) => {
@@ -1071,7 +1063,7 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
                 .append();
             auto_increment!(inst.source(), il);
         }
-        Instruction::Dadd(inst) => {
+        Instruction::Dadd(_) => {
             il.unimplemented().append();
         }
         Instruction::Bit(inst) => {
