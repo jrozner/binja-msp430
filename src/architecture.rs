@@ -410,7 +410,7 @@ fn generate_tokens(inst: &Instruction, addr: u64) -> Vec<InstructionTextToken> {
         Instruction::Rra(inst) => generate_single_operand_tokens(inst, addr, false),
         Instruction::Sxt(inst) => generate_single_operand_tokens(inst, addr, false),
         Instruction::Push(inst) => generate_single_operand_tokens(inst, addr, false),
-        Instruction::Call(inst) => generate_single_operand_tokens(inst, addr, false),
+        Instruction::Call(inst) => generate_single_operand_tokens(inst, addr, true),
         Instruction::Reti(_) => vec![InstructionTextToken::new(
             InstructionTextTokenContents::Instruction,
             "reti".to_string(),
