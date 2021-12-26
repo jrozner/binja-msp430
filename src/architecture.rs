@@ -1191,12 +1191,10 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
             emulated!(inst, il, op);
         }
         Instruction::Dint(_) => {
-            // NOTE: Lifting would probably just clear the GIE (flag) but likely doesn't have any other meaningful impact
-            il.unimplemented().append();
+            // If GIE flag is ever exposed this should clear it
         }
         Instruction::Eint(_) => {
-            // NOTE: Lifting would probably just set the GIE (flag) but likely doesn't have any other meaningful impact
-            il.unimplemented().append();
+            // If GIE flag is ever exposed this should set it
         }
         Instruction::Inc(inst) => {
             let size = match inst.operand_width() {
