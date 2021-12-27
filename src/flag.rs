@@ -97,6 +97,8 @@ impl architecture::FlagGroup for FlagGroup {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FlagWrite {
     All,
+    Nz,
+    Nvz,
     Cnz,
 }
 
@@ -107,6 +109,8 @@ impl architecture::FlagWrite for FlagWrite {
     fn name(&self) -> Cow<str> {
         match self {
             Self::All => "*".into(),
+            Self::Nz => "nz".into(),
+            Self::Nvz => "nvz".into(),
             Self::Cnz => "cnz".into(),
         }
     }
@@ -118,13 +122,17 @@ impl architecture::FlagWrite for FlagWrite {
     fn id(&self) -> u32 {
         match self {
             Self::All => 1,
-            Self::Cnz => 2,
+            Self::Nz => 2,
+            Self::Nvz => 3,
+            Self::Cnz => 4,
         }
     }
 
     fn flags_written(&self) -> Vec<Self::FlagType> {
         match self {
             Self::All => vec![Flag::C, Flag::N, Flag::V, Flag::Z],
+            Self::Nz => vec![Flag::N, Flag::Z],
+            Self::Nvz => vec![Flag::N, Flag::V, Flag::Z],
             Self::Cnz => vec![Flag::C, Flag::N, Flag::Z],
         }
     }
@@ -136,7 +144,9 @@ impl TryFrom<u32> for FlagWrite {
     fn try_from(value: u32) -> Result<Self, Self::Error> {
         match value {
             1 => Ok(Self::All),
-            2 => Ok(Self::Cnz),
+            2 => Ok(Self::Nz),
+            3 => Ok(Self::Nvz),
+            4 => Ok(Self::Cnz),
             _ => Err(()),
         }
     }

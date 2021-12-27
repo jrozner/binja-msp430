@@ -196,20 +196,23 @@ pub(crate) fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430
             let dest = lift_source_operand(inst.source(), size, il);
             let op = match inst.operand_width() {
                 Some(OperandWidth::Byte) => {
-                    il.sx(2, il.ror(size, dest, src).with_flag_write(FlagWrite::All))
+                    il.sx(2, il.ror(size, dest, src).with_flag_write(FlagWrite::Cnz))
                 }
                 Some(OperandWidth::Word) | None => {
-                    il.ror(size, dest, src).with_flag_write(FlagWrite::All)
+                    il.ror(size, dest, src).with_flag_write(FlagWrite::Cnz)
                 }
             };
             one_operand!(inst.source(), il, op);
+            il.set_flag(Flag::V, il.const_int(0, 0)).append();
         }
         Instruction::Sxt(inst) => {
             // source is always 1 byte and instruction is always 2 bytes for sxt because we're sign
             // extending the low byte into the high and the result is always 2 bytes
             let src = lift_source_operand(inst.source(), 1, il);
-            let op = il.sx(2, src).with_flag_write(FlagWrite::All);
+            let op = il.sx(2, src).with_flag_write(FlagWrite::Nz);
             one_operand!(inst.source(), il, op);
+            il.set_flag(Flag::V, il.const_int(0, 0)).append();
+            il.set_flag(Flag::C, il.not(0, il.flag(Flag::Z))).append();
         }
         Instruction::Push(inst) => {
             let size = match inst.operand_width() {
@@ -345,8 +348,10 @@ pub(crate) fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430
             let src = lift_source_operand(inst.source(), size, il);
             let dest = lift_source_operand(inst.destination(), size, il);
             il.and(size, src, dest)
-                .with_flag_write(FlagWrite::All)
+                .with_flag_write(FlagWrite::Nz)
                 .append();
+            il.set_flag(Flag::V, il.const_int(0, 0)).append();
+            il.set_flag(Flag::C, il.not(0, il.flag(Flag::Z))).append();
             auto_increment!(inst.source(), il);
         }
         Instruction::Bic(inst) => {
@@ -377,11 +382,12 @@ pub(crate) fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430
             let dest = lift_source_operand(inst.destination(), size, il);
             let op = match inst.operand_width() {
                 OperandWidth::Byte => {
-                    il.sx(2, il.xor(size, src, dest).with_flag_write(FlagWrite::All))
+                    il.sx(2, il.xor(size, src, dest).with_flag_write(FlagWrite::Nvz))
                 }
-                OperandWidth::Word => il.xor(size, src, dest).with_flag_write(FlagWrite::All),
+                OperandWidth::Word => il.xor(size, src, dest).with_flag_write(FlagWrite::Nvz),
             };
             two_operand!(inst.destination(), il, op);
+            il.set_flag(Flag::C, il.not(0, il.flag(Flag::Z))).append();
             auto_increment!(inst.source(), il);
         }
         Instruction::And(inst) => {
@@ -390,11 +396,13 @@ pub(crate) fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430
             let dest = lift_source_operand(inst.destination(), size, il);
             let op = match inst.operand_width() {
                 OperandWidth::Byte => {
-                    il.sx(2, il.and(size, src, dest).with_flag_write(FlagWrite::All))
+                    il.sx(2, il.and(size, src, dest).with_flag_write(FlagWrite::Nz))
                 }
-                OperandWidth::Word => il.and(size, src, dest).with_flag_write(FlagWrite::All),
+                OperandWidth::Word => il.and(size, src, dest).with_flag_write(FlagWrite::Nz),
             };
             two_operand!(inst.destination(), il, op);
+            il.set_flag(Flag::V, il.const_int(0, 0)).append();
+            il.set_flag(Flag::C, il.not(0, il.flag(Flag::Z))).append();
             auto_increment!(inst.source(), il);
         }
 
@@ -422,15 +430,15 @@ pub(crate) fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430
         }
         Instruction::Clrc(_) => {
             // TODO: should we lift clearing the C bit in the SR register as well?
-            il.set_flag(Flag::C, il.const_int(0, 1)).append();
+            il.set_flag(Flag::C, il.const_int(0, 0)).append();
         }
         Instruction::Clrn(_) => {
             // TODO: should we lift clearing the N bit in the SR register as well?
-            il.set_flag(Flag::N, il.const_int(0, 1)).append();
+            il.set_flag(Flag::N, il.const_int(0, 0)).append();
         }
         Instruction::Clrz(_) => {
             // TODO: should we lift clearing the Z bit in the SR register as well?
-            il.set_flag(Flag::Z, il.const_int(0, 1)).append();
+            il.set_flag(Flag::Z, il.const_int(0, 0)).append();
         }
         Instruction::Dadc(_) => {
             il.unimplemented().append();
@@ -521,13 +529,14 @@ pub(crate) fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430
             let dest = lift_source_operand(&inst.destination().unwrap(), size, il);
             let op = match inst.operand_width() {
                 Some(OperandWidth::Byte) => {
-                    il.sx(2, il.not(size, dest).with_flag_write(FlagWrite::All))
+                    il.sx(2, il.not(size, dest).with_flag_write(FlagWrite::Nvz))
                 }
                 Some(OperandWidth::Word) | None => {
-                    il.not(size, dest).with_flag_write(FlagWrite::All)
+                    il.not(size, dest).with_flag_write(FlagWrite::Nvz)
                 }
             };
             emulated!(inst, il, op);
+            il.set_flag(Flag::C, il.not(0, il.flag(Flag::Z))).append();
         }
         Instruction::Nop(_) => {
             il.nop().append();
@@ -603,8 +612,10 @@ pub(crate) fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430
             };
             let dest = lift_source_operand(&inst.destination().unwrap(), size, il);
             il.sub(size, dest, il.const_int(size, 0))
-                .with_flag_write(FlagWrite::All)
+                .with_flag_write(FlagWrite::Nz)
                 .append();
+            il.set_flag(Flag::V, il.const_int(0, 0)).append();
+            il.set_flag(Flag::C, il.const_int(0, 1)).append();
         }
     }
 }
