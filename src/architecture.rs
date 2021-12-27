@@ -441,30 +441,30 @@ fn generate_tokens(inst: &Instruction, addr: u64) -> Vec<InstructionTextToken> {
         Instruction::And(inst) => generate_two_operand_tokens(inst, addr),
 
         // emulated
-        Instruction::Adc(inst) => generate_emulated_tokens(inst, addr),
-        Instruction::Br(inst) => generate_emulated_tokens(inst, addr),
-        Instruction::Clr(inst) => generate_emulated_tokens(inst, addr),
-        Instruction::Clrc(inst) => generate_emulated_tokens(inst, addr),
-        Instruction::Clrn(inst) => generate_emulated_tokens(inst, addr),
-        Instruction::Clrz(inst) => generate_emulated_tokens(inst, addr),
-        Instruction::Dadc(inst) => generate_emulated_tokens(inst, addr),
-        Instruction::Dec(inst) => generate_emulated_tokens(inst, addr),
-        Instruction::Decd(inst) => generate_emulated_tokens(inst, addr),
-        Instruction::Dint(inst) => generate_emulated_tokens(inst, addr),
-        Instruction::Eint(inst) => generate_emulated_tokens(inst, addr),
-        Instruction::Inc(inst) => generate_emulated_tokens(inst, addr),
-        Instruction::Incd(inst) => generate_emulated_tokens(inst, addr),
-        Instruction::Inv(inst) => generate_emulated_tokens(inst, addr),
-        Instruction::Nop(inst) => generate_emulated_tokens(inst, addr),
-        Instruction::Pop(inst) => generate_emulated_tokens(inst, addr),
-        Instruction::Ret(inst) => generate_emulated_tokens(inst, addr),
-        Instruction::Rla(inst) => generate_emulated_tokens(inst, addr),
-        Instruction::Rlc(inst) => generate_emulated_tokens(inst, addr),
-        Instruction::Sbc(inst) => generate_emulated_tokens(inst, addr),
-        Instruction::Setc(inst) => generate_emulated_tokens(inst, addr),
-        Instruction::Setn(inst) => generate_emulated_tokens(inst, addr),
-        Instruction::Setz(inst) => generate_emulated_tokens(inst, addr),
-        Instruction::Tst(inst) => generate_emulated_tokens(inst, addr),
+        Instruction::Adc(inst) => generate_emulated_tokens(inst, addr, false),
+        Instruction::Br(inst) => generate_emulated_tokens(inst, addr, true),
+        Instruction::Clr(inst) => generate_emulated_tokens(inst, addr, false),
+        Instruction::Clrc(inst) => generate_emulated_tokens(inst, addr, false),
+        Instruction::Clrn(inst) => generate_emulated_tokens(inst, addr, false),
+        Instruction::Clrz(inst) => generate_emulated_tokens(inst, addr, false),
+        Instruction::Dadc(inst) => generate_emulated_tokens(inst, addr, false),
+        Instruction::Dec(inst) => generate_emulated_tokens(inst, addr, false),
+        Instruction::Decd(inst) => generate_emulated_tokens(inst, addr, false),
+        Instruction::Dint(inst) => generate_emulated_tokens(inst, addr, false),
+        Instruction::Eint(inst) => generate_emulated_tokens(inst, addr, false),
+        Instruction::Inc(inst) => generate_emulated_tokens(inst, addr, false),
+        Instruction::Incd(inst) => generate_emulated_tokens(inst, addr, false),
+        Instruction::Inv(inst) => generate_emulated_tokens(inst, addr, false),
+        Instruction::Nop(inst) => generate_emulated_tokens(inst, addr, false),
+        Instruction::Pop(inst) => generate_emulated_tokens(inst, addr, false),
+        Instruction::Ret(inst) => generate_emulated_tokens(inst, addr, false),
+        Instruction::Rla(inst) => generate_emulated_tokens(inst, addr, false),
+        Instruction::Rlc(inst) => generate_emulated_tokens(inst, addr, false),
+        Instruction::Sbc(inst) => generate_emulated_tokens(inst, addr, false),
+        Instruction::Setc(inst) => generate_emulated_tokens(inst, addr, false),
+        Instruction::Setn(inst) => generate_emulated_tokens(inst, addr, false),
+        Instruction::Setz(inst) => generate_emulated_tokens(inst, addr, false),
+        Instruction::Tst(inst) => generate_emulated_tokens(inst, addr, false),
     }
 }
 
@@ -539,7 +539,11 @@ fn generate_two_operand_tokens(inst: &impl TwoOperand, addr: u64) -> Vec<Instruc
     res
 }
 
-fn generate_emulated_tokens(inst: &impl Emulated, addr: u64) -> Vec<InstructionTextToken> {
+fn generate_emulated_tokens(
+    inst: &impl Emulated,
+    addr: u64,
+    call: bool,
+) -> Vec<InstructionTextToken> {
     let mut res = vec![InstructionTextToken::new(
         InstructionTextTokenContents::Instruction,
         inst.mnemonic().to_string(),
@@ -557,7 +561,7 @@ fn generate_emulated_tokens(inst: &impl Emulated, addr: u64) -> Vec<InstructionT
         res.extend_from_slice(&generate_operand_tokens(
             &inst.destination().unwrap(),
             addr,
-            false,
+            call,
         ))
     }
 
