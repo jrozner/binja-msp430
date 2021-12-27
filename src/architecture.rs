@@ -785,7 +785,7 @@ macro_rules! one_operand {
                 .store(2, $il.add(2, $il.reg(2, Register::Pc), *offset as u64), $op)
                 .append(),
             Operand::Absolute(val) => $il.store(2, $il.const_ptr(*val as u64), $op).append(),
-            Operand::Immediate(_) => unimplemented!(), // TODO
+            Operand::Immediate(val) => $op.append(),
             Operand::RegisterIndirect(r) => $il
                 .store(2, $il.reg(2, Register::try_from(*r as u32).unwrap()), $op)
                 .append(),
@@ -1138,7 +1138,7 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
             let dest = if let Some(Operand::Immediate(dest)) = inst.destination() {
                 if let Some(label) = il.label_for_address(*dest as u64) {
                     il.goto(label).append();
-                    return
+                    return;
                 } else {
                     il.const_ptr(*dest as u64)
                 }
