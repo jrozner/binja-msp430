@@ -947,8 +947,6 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
                 None => 2,
             };
             let src = lift_source_operand(inst.source(), size, il);
-            // always push 2 bytes, even with push.b. Push.b will only push the low byte setting
-            // high byte to 0
             il.push(2, src).append();
             auto_increment!(inst.source(), il);
         }
@@ -1266,7 +1264,6 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
         }
         Instruction::Pop(inst) => {
             if let Some(Operand::RegisterDirect(r)) = inst.destination() {
-                // TODO: We do always pop off 2 bytes, even with using pop.b, but the top byte should be zeroed out (confirmed in debugger)
                 let size = match inst.operand_width() {
                     Some(width) => width_to_size(width),
                     None => 2,
