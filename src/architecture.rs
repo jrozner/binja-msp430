@@ -953,13 +953,17 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
             auto_increment!(inst.source(), il);
         }
         Instruction::Call(inst) => {
-            // TODO: if immediate mode need to make argument CONST_PTR rather than CONST_INT
             // TODO: verify the special autoincrement behavior Josh implemented?
-            let size = match inst.operand_width() {
-                Some(width) => width_to_size(width),
-                None => 2,
+            let src = if let Operand::Immediate(src) = inst.source() {
+                il.const_ptr(*src as u64)
+            } else {
+                let size = match inst.operand_width() {
+                    Some(width) => width_to_size(width),
+                    None => 2,
+                };
+
+                lift_source_operand(inst.source(), size, il)
             };
-            let src = lift_source_operand(inst.source(), size, il);
             il.call(src).append();
             auto_increment!(inst.source(), il);
         }
@@ -1131,8 +1135,17 @@ fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430>) {
             il.unimplemented().append();
         }
         Instruction::Br(inst) => {
-            // TODO: this has the same problem as call using CONST_INT rather than CONST_PTR for dest. Also not sure if this is lifted correctly or whether we want to add label logic where applicable (for immediate)
-            let dest = lift_source_operand(&inst.destination().unwrap(), 2, il);
+            let dest = if let Some(Operand::Immediate(dest)) = inst.destination() {
+                if let Some(label) = il.label_for_address(*dest as u64) {
+                    il.goto(label).append();
+                    return
+                } else {
+                    il.const_ptr(*dest as u64)
+                }
+            } else {
+                lift_source_operand(&inst.destination().unwrap(), 2, il)
+            };
+
             il.jump(dest).append();
         }
         Instruction::Clr(inst) => {
