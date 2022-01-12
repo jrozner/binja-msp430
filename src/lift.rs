@@ -184,8 +184,10 @@ pub(crate) fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430
             };
             one_operand!(inst.source(), il, op);
         }
-        Instruction::Swpb(_) => {
-            il.unimplemented().append();
+        Instruction::Swpb(inst) => {
+            let src = lift_source_operand(inst.source(), 2, il);
+            let op = il.rol(2, src, il.const_int(2, 8));
+            one_operand!(inst.source(), il, op);
         }
         Instruction::Rra(inst) => {
             let size = match inst.operand_width() {
