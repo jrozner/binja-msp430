@@ -333,9 +333,7 @@ impl Architecture for Msp430 {
     }
 
     fn flag_write_types(&self) -> Vec<Self::FlagWrite> {
-        //TODO: fix this once FlagClasses are understood
-        //vec![FlagWrite::All, FlagWrite::Cnz]
-        vec![]
+        vec![FlagWrite::All, FlagWrite::Nz, FlagWrite::Nvz, FlagWrite::Cnz]
     }
 
     fn flag_classes(&self) -> Vec<Self::FlagClass> {
