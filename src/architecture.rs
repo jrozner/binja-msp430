@@ -255,7 +255,7 @@ impl Architecture for Msp430 {
     fn flags_required_for_flag_condition(
         &self,
         condition: FlagCondition,
-        class: Option<Self::FlagClass>,
+        _class: Option<Self::FlagClass>,
     ) -> Vec<Self::Flag> {
         match condition {
             FlagCondition::LLFC_ULE => vec![Flag::C],
@@ -272,8 +272,8 @@ impl Architecture for Msp430 {
 
     fn flag_group_llil<'a>(
         &self,
-        group: Self::FlagGroup,
-        il: &'a mut Lifter<Self>,
+        _group: Self::FlagGroup,
+        _il: &'a mut Lifter<Self>,
     ) -> Option<LiftedExpr<'a, Self>> {
         None
     }

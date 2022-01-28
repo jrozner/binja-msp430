@@ -25,7 +25,7 @@ impl architecture::Flag for Flag {
         }
     }
 
-    fn role(&self, class: Option<Self::FlagClass>) -> architecture::FlagRole {
+    fn role(&self, _class: Option<Self::FlagClass>) -> architecture::FlagRole {
         match self {
             Self::C => FlagRole::CarryFlagRole,
             Self::Z => FlagRole::ZeroFlagRole,
