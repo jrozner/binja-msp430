@@ -257,11 +257,11 @@ pub(crate) fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430
             conditional_jump!(addr, inst, cond, il);
         }
         Instruction::Jlo(inst) => {
-            let cond = il.flag_cond(FlagCondition::LLFC_UGT);
+            let cond = il.flag_cond(FlagCondition::LLFC_ULT);
             conditional_jump!(addr, inst, cond, il);
         }
         Instruction::Jc(inst) => {
-            let cond = il.flag_cond(FlagCondition::LLFC_ULE);
+            let cond = il.flag_cond(FlagCondition::LLFC_UGE);
             conditional_jump!(addr, inst, cond, il);
         }
         Instruction::Jn(inst) => {

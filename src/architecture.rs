@@ -258,8 +258,8 @@ impl Architecture for Msp430 {
         _class: Option<Self::FlagClass>,
     ) -> Vec<Self::Flag> {
         match condition {
-            FlagCondition::LLFC_ULE => vec![Flag::C],
-            FlagCondition::LLFC_UGT => vec![Flag::C],
+            FlagCondition::LLFC_UGE => vec![Flag::C],
+            FlagCondition::LLFC_ULT => vec![Flag::C],
             FlagCondition::LLFC_SGE => vec![Flag::N, Flag::V],
             FlagCondition::LLFC_SLT => vec![Flag::N, Flag::V],
             FlagCondition::LLFC_E => vec![Flag::Z],
