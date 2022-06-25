@@ -754,11 +754,13 @@ fn generate_operand_tokens(source: &Operand, addr: u64, call: bool) -> Vec<Instr
                 InstructionTextToken::new(BnString::new("+"), InstructionTextTokenContents::Text),
             ]
         }
-        // TODO: is this correct? can you know what this is without knowing what PC is?
-        Operand::Symbolic(i) => vec![InstructionTextToken::new(
-            BnString::new(format!("{:#x}", addr as i16 + i)),
-            InstructionTextTokenContents::CodeRelativeAddress((addr as i16 + i) as u64),
-        )],
+        Operand::Symbolic(i) => {
+            let val = (addr as i64 + *i as i64) as u64;
+            vec![InstructionTextToken::new(
+                BnString::new(format!("{:#x}", val)),
+                InstructionTextTokenContents::CodeRelativeAddress(val),
+            )]
+        }
         Operand::Immediate(i) => {
             if call {
                 vec![InstructionTextToken::new(
