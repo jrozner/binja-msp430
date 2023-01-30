@@ -173,7 +173,7 @@ impl Architecture for Msp430 {
                         Some(Operand::Immediate(addr)) => info
                             .add_branch(BranchInfo::Unconditional(*addr as u64), Some(self.handle)),
                         Some(Operand::Constant(_)) => info
-                            .add_branch(BranchInfo::Unconditional(addr as u64), Some(self.handle)),
+                            .add_branch(BranchInfo::Unconditional(addr), Some(self.handle)),
                         Some(Operand::RegisterIndirect(_))
                         | Some(Operand::RegisterIndirectAutoIncrement(_)) => {
                             info.add_branch(BranchInfo::Indirect, Some(self.handle))
@@ -198,7 +198,7 @@ impl Architecture for Msp430 {
                             info.add_branch(BranchInfo::Call(*addr as u64), Some(self.handle))
                         }
                         Operand::Constant(_) => {
-                            info.add_branch(BranchInfo::Call(addr as u64), Some(self.handle))
+                            info.add_branch(BranchInfo::Call(addr), Some(self.handle))
                         }
                         Operand::RegisterIndirect(_)
                         | Operand::RegisterIndirectAutoIncrement(_) => {
@@ -512,7 +512,7 @@ fn generate_jxx_tokens(inst: &impl Jxx, addr: u64) -> Vec<InstructionTextToken> 
     }
 
     res.push(InstructionTextToken::new(
-        BnString::new(format!("0x{:4x}", fixed_addr)),
+        BnString::new(format!("0x{fixed_addr:4x}")),
         InstructionTextTokenContents::CodeRelativeAddress(fixed_addr),
     ));
 
@@ -599,7 +599,7 @@ fn generate_operand_tokens(source: &Operand, addr: u64, call: bool) -> Vec<Instr
         Operand::Indexed((r, i)) => match r {
             0 => {
                 let num_text = if *i >= 0 {
-                    format!("{:#x}", i)
+                    format!("{i:#x}")
                 } else {
                     format!("-{:#x}", -i)
                 };
@@ -624,7 +624,7 @@ fn generate_operand_tokens(source: &Operand, addr: u64, call: bool) -> Vec<Instr
             }
             1 => {
                 let num_text = if *i >= 0 {
-                    format!("{:#x}", i)
+                    format!("{i:#x}")
                 } else {
                     format!("-{:#x}", -i)
                 };
@@ -649,7 +649,7 @@ fn generate_operand_tokens(source: &Operand, addr: u64, call: bool) -> Vec<Instr
             }
             2 => {
                 let num_text = if *i >= 0 {
-                    format!("{:#x}", i)
+                    format!("{i:#x}")
                 } else {
                     format!("-{:#x}", -i)
                 };
@@ -674,7 +674,7 @@ fn generate_operand_tokens(source: &Operand, addr: u64, call: bool) -> Vec<Instr
             }
             3 => {
                 let num_text = if *i >= 0 {
-                    format!("{:#x}", i)
+                    format!("{i:#x}")
                 } else {
                     format!("-{:#x}", -i)
                 };
@@ -699,7 +699,7 @@ fn generate_operand_tokens(source: &Operand, addr: u64, call: bool) -> Vec<Instr
             }
             _ => {
                 let num_text = if *i >= 0 {
-                    format!("{:#x}", i)
+                    format!("{i:#x}")
                 } else {
                     format!("-{:#x}", -i)
                 };
@@ -727,7 +727,7 @@ fn generate_operand_tokens(source: &Operand, addr: u64, call: bool) -> Vec<Instr
             let r_text = if *r == 1 {
                 "sp".into()
             } else {
-                format!("r{}", r)
+                format!("r{r}")
             };
 
             vec![
@@ -742,7 +742,7 @@ fn generate_operand_tokens(source: &Operand, addr: u64, call: bool) -> Vec<Instr
             let r_text = if *r == 1 {
                 "sp".into()
             } else {
-                format!("r{}", r)
+                format!("r{r}")
             };
 
             vec![
@@ -757,19 +757,19 @@ fn generate_operand_tokens(source: &Operand, addr: u64, call: bool) -> Vec<Instr
         Operand::Symbolic(i) => {
             let val = (addr as i64 + *i as i64) as u64;
             vec![InstructionTextToken::new(
-                BnString::new(format!("{:#x}", val)),
+                BnString::new(format!("{val:#x}")),
                 InstructionTextTokenContents::CodeRelativeAddress(val),
             )]
         }
         Operand::Immediate(i) => {
             if call {
                 vec![InstructionTextToken::new(
-                    BnString::new(format!("{:#x}", i)),
+                    BnString::new(format!("{i:#x}")),
                     InstructionTextTokenContents::CodeRelativeAddress(*i as u64),
                 )]
             } else {
                 vec![InstructionTextToken::new(
-                    BnString::new(format!("{:#x}", i)),
+                    BnString::new(format!("{i:#x}")),
                     InstructionTextTokenContents::PossibleAddress(*i as u64),
                 )]
             }
@@ -777,19 +777,19 @@ fn generate_operand_tokens(source: &Operand, addr: u64, call: bool) -> Vec<Instr
         Operand::Absolute(a) => {
             if call {
                 vec![InstructionTextToken::new(
-                    BnString::new(format!("{:#x}", a)),
+                    BnString::new(format!("{a:#x}")),
                     InstructionTextTokenContents::CodeRelativeAddress(*a as u64),
                 )]
             } else {
                 vec![InstructionTextToken::new(
-                    BnString::new(format!("{:#x}", a)),
+                    BnString::new(format!("{a:#x}")),
                     InstructionTextTokenContents::PossibleAddress(*a as u64),
                 )]
             }
         }
         Operand::Constant(i) => {
             let num_text = if *i >= 0 {
-                format!("{:#x}", i)
+                format!("{i:#x}")
             } else {
                 format!("-{:#x}", -i)
             };
