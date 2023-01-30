@@ -295,7 +295,7 @@ pub(crate) fn lift_instruction(inst: &Instruction, addr: u64, il: &Lifter<Msp430
             let src = match inst.operand_width() {
                 OperandWidth::Byte => il
                     .sx(2, lift_source_operand(inst.source(), size, il))
-                    .into_expr(),
+                    .build(),
                 OperandWidth::Word => lift_source_operand(inst.source(), size, il),
             };
             two_operand!(inst.destination(), il, src);
@@ -644,19 +644,19 @@ fn lift_source_operand<'a>(
                     il.const_int(2, *offset as u64),
                 ),
             )
-            .into_expr(),
+            .build(),
         // should we add offset to addr here rather than lifting to the register since we know where PC is?
         Operand::Symbolic(offset) => il
             .load(
                 size,
                 il.add(2, il.reg(2, Register::Pc), il.const_int(2, *offset as u64)),
             )
-            .into_expr(),
-        Operand::Absolute(addr) => il.load(size, il.const_ptr(*addr as u64)).into_expr(),
+            .build(),
+        Operand::Absolute(addr) => il.load(size, il.const_ptr(*addr as u64)).build(),
         // these are the same, we need to autoincrement in a separate il instruction
         Operand::RegisterIndirect(r) | Operand::RegisterIndirectAutoIncrement(r) => il
             .load(size, il.reg(2, Register::try_from(*r as u32).unwrap()))
-            .into_expr(),
+            .build(),
         Operand::Immediate(val) => il.const_int(size, *val as u64),
         Operand::Constant(val) => il.const_int(size, *val as u64),
     }
