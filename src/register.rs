@@ -3,7 +3,7 @@ use binaryninja::architecture::ImplicitRegisterExtend;
 
 use std::borrow::Cow;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Register {
     Pc,
     Sp,
