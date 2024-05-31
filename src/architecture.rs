@@ -5,7 +5,7 @@ use crate::register::Register;
 use binaryninja::{
     architecture::{
         Architecture, BranchInfo, CoreArchitecture, CustomArchitectureHandle, FlagCondition,
-        InstructionInfo, UnusedRegisterStack, UnusedRegisterStackInfo, UnusedIntrinsic,
+        InstructionInfo, UnusedIntrinsic, UnusedRegisterStack, UnusedRegisterStackInfo,
     },
     disassembly::{InstructionTextToken, InstructionTextTokenContents},
     llil::{LiftedExpr, Lifter},
@@ -174,8 +174,9 @@ impl Architecture for Msp430 {
                         ),
                         Some(Operand::Immediate(addr)) => info
                             .add_branch(BranchInfo::Unconditional(*addr as u64), Some(self.handle)),
-                        Some(Operand::Constant(_)) => info
-                            .add_branch(BranchInfo::Unconditional(addr), Some(self.handle)),
+                        Some(Operand::Constant(_)) => {
+                            info.add_branch(BranchInfo::Unconditional(addr), Some(self.handle))
+                        }
                         Some(Operand::RegisterIndirect(_))
                         | Some(Operand::RegisterIndirectAutoIncrement(_)) => {
                             info.add_branch(BranchInfo::Indirect, Some(self.handle))
@@ -610,18 +611,9 @@ fn generate_operand_tokens(source: &Operand, addr: u64, call: bool) -> Vec<Instr
                         &num_text,
                         InstructionTextTokenContents::Integer(*i as u64),
                     ),
-                    InstructionTextToken::new(
-                        "(",
-                        InstructionTextTokenContents::Text,
-                    ),
-                    InstructionTextToken::new(
-                        "pc",
-                        InstructionTextTokenContents::Register,
-                    ),
-                    InstructionTextToken::new(
-                        ")",
-                        InstructionTextTokenContents::Text,
-                    ),
+                    InstructionTextToken::new("(", InstructionTextTokenContents::Text),
+                    InstructionTextToken::new("pc", InstructionTextTokenContents::Register),
+                    InstructionTextToken::new(")", InstructionTextTokenContents::Text),
                 ]
             }
             1 => {
@@ -635,18 +627,9 @@ fn generate_operand_tokens(source: &Operand, addr: u64, call: bool) -> Vec<Instr
                         &num_text,
                         InstructionTextTokenContents::Integer(*i as u64),
                     ),
-                    InstructionTextToken::new(
-                        "(",
-                        InstructionTextTokenContents::Text,
-                    ),
-                    InstructionTextToken::new(
-                        "sp",
-                        InstructionTextTokenContents::Register,
-                    ),
-                    InstructionTextToken::new(
-                        ")",
-                        InstructionTextTokenContents::Text,
-                    ),
+                    InstructionTextToken::new("(", InstructionTextTokenContents::Text),
+                    InstructionTextToken::new("sp", InstructionTextTokenContents::Register),
+                    InstructionTextToken::new(")", InstructionTextTokenContents::Text),
                 ]
             }
             2 => {
@@ -660,18 +643,9 @@ fn generate_operand_tokens(source: &Operand, addr: u64, call: bool) -> Vec<Instr
                         &num_text,
                         InstructionTextTokenContents::Integer(*i as u64),
                     ),
-                    InstructionTextToken::new(
-                        "(",
-                        InstructionTextTokenContents::Text,
-                    ),
-                    InstructionTextToken::new(
-                        "sr",
-                        InstructionTextTokenContents::Register,
-                    ),
-                    InstructionTextToken::new(
-                        ")",
-                        InstructionTextTokenContents::Text,
-                    ),
+                    InstructionTextToken::new("(", InstructionTextTokenContents::Text),
+                    InstructionTextToken::new("sr", InstructionTextTokenContents::Register),
+                    InstructionTextToken::new(")", InstructionTextTokenContents::Text),
                 ]
             }
             3 => {
@@ -685,18 +659,9 @@ fn generate_operand_tokens(source: &Operand, addr: u64, call: bool) -> Vec<Instr
                         &num_text,
                         InstructionTextTokenContents::Integer(*i as u64),
                     ),
-                    InstructionTextToken::new(
-                        "(",
-                        InstructionTextTokenContents::Text,
-                    ),
-                    InstructionTextToken::new(
-                        "cg",
-                        InstructionTextTokenContents::Register,
-                    ),
-                    InstructionTextToken::new(
-                        ")",
-                        InstructionTextTokenContents::Text,
-                    ),
+                    InstructionTextToken::new("(", InstructionTextTokenContents::Text),
+                    InstructionTextToken::new("cg", InstructionTextTokenContents::Register),
+                    InstructionTextToken::new(")", InstructionTextTokenContents::Text),
                 ]
             }
             _ => {
@@ -710,18 +675,12 @@ fn generate_operand_tokens(source: &Operand, addr: u64, call: bool) -> Vec<Instr
                         &num_text,
                         InstructionTextTokenContents::Integer(*i as u64),
                     ),
-                    InstructionTextToken::new(
-                        "(",
-                        InstructionTextTokenContents::Text,
-                    ),
+                    InstructionTextToken::new("(", InstructionTextTokenContents::Text),
                     InstructionTextToken::new(
                         &format!("r{r}"),
                         InstructionTextTokenContents::Register,
                     ),
-                    InstructionTextToken::new(
-                        ")",
-                        InstructionTextTokenContents::Text,
-                    ),
+                    InstructionTextToken::new(")", InstructionTextTokenContents::Text),
                 ]
             }
         },
@@ -734,10 +693,7 @@ fn generate_operand_tokens(source: &Operand, addr: u64, call: bool) -> Vec<Instr
 
             vec![
                 InstructionTextToken::new("@", InstructionTextTokenContents::Text),
-                InstructionTextToken::new(
-                    &r_text,
-                    InstructionTextTokenContents::Register,
-                ),
+                InstructionTextToken::new(&r_text, InstructionTextTokenContents::Register),
             ]
         }
         Operand::RegisterIndirectAutoIncrement(r) => {
@@ -749,10 +705,7 @@ fn generate_operand_tokens(source: &Operand, addr: u64, call: bool) -> Vec<Instr
 
             vec![
                 InstructionTextToken::new("@", InstructionTextTokenContents::Text),
-                InstructionTextToken::new(
-                    &r_text,
-                    InstructionTextTokenContents::Register,
-                ),
+                InstructionTextToken::new(&r_text, InstructionTextTokenContents::Register),
                 InstructionTextToken::new("+", InstructionTextTokenContents::Text),
             ]
         }
