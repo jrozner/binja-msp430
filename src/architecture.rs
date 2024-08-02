@@ -364,10 +364,7 @@ impl Architecture for Msp430 {
     fn register_from_id(&self, id: u32) -> Option<Self::Register> {
         match id.try_into() {
             Ok(register) => Some(register),
-            Err(_) => {
-                error!("invalid register id {}", id);
-                None
-            }
+            Err(_) => None,
         }
     }
 

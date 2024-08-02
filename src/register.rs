@@ -27,6 +27,10 @@ impl TryFrom<u32> for Register {
     type Error = ();
 
     fn try_from(id: u32) -> Result<Self, Self::Error> {
+        // TODO: we should return separate errors if the id is between 0x7fff_ffff and 0xffff_ffff
+        // vs outside of that range. Temporary registers have have the high bit set which we
+        // shouldn't get, unless there is a bug in core. An id that isn't within that range but we
+        // don't handle is a bug in the architecture.
         match id {
             0 => Ok(Self::Pc),
             1 => Ok(Self::Sp),
