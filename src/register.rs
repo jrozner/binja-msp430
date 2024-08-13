@@ -21,6 +21,7 @@ pub enum Register {
     R13,
     R14,
     R15,
+    Temporary,
 }
 
 impl TryFrom<u32> for Register {
@@ -44,6 +45,7 @@ impl TryFrom<u32> for Register {
             13 => Ok(Self::R13),
             14 => Ok(Self::R14),
             15 => Ok(Self::R15),
+            0x7fff_ffff..=0xffff_ffff => Ok(Self::Temporary),
             _ => Err(()),
         }
     }
@@ -70,6 +72,7 @@ impl architecture::Register for Register {
             | Self::R13
             | Self::R14
             | Self::R15 => format!("r{}", self.id()).into(),
+            Self::Temporary => "".into(),
         }
     }
 
@@ -95,6 +98,7 @@ impl architecture::Register for Register {
             Self::R13 => 13,
             Self::R14 => 14,
             Self::R15 => 15,
+            Self::Temporary => -1,
         }
     }
 }
