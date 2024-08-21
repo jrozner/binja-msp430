@@ -21,7 +21,7 @@ use architecture::Msp430;
 pub extern "C" fn CorePluginInit() -> bool {
     binaryninja::logger::init(log::LevelFilter::Info).unwrap();
     let arch = binaryninja::architecture::register_architecture(
-        "msp430-native",
+        "msp430",
         |custom_handle, handle| Msp430::new(handle, custom_handle),
     );
 
