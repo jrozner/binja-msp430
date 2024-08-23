@@ -1,5 +1,7 @@
 # binja-msp430
 
+**NOTE**: This repo is now unmaintained because it has been merged upstream directly into Binary Ninja. All future work will be done within https://github.com/Vector35/binaryninja-api/tree/dev/arch/msp430.
+
 A Binary Ninja plugin to add support for the MSP430 family of microcontrollers
 
 ## Use
